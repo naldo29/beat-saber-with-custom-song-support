@@ -20,7 +20,7 @@ CFLAGS  := -g -O1 -Wall -Wextra -Wno-unused-parameter -arch arm64 $(MVK_INC) $(R
 LDLIBS  := -lz -framework AudioToolbox -framework CoreAudio \
            -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface \
            -framework CoreFoundation -framework AVFoundation -framework Foundation \
-           -framework Metal
+           -framework Metal -framework CoreText -framework CoreGraphics
 # The host/ship split is a source-list boundary, not a runtime getenv.
 #
 # RUNTIME_SHIP is everything that goes into the visionOS app bundle. It is the
@@ -77,7 +77,7 @@ RUNTIME_SHIP := $(LX_SRC) runtime/guest/kl_linuxproc.c \
            runtime/guest/kl_mono.c \
            runtime/guest/kl_il2cpp.c runtime/kl_fault.c runtime/guest/kl_guestpatch.c \
            runtime/guest/kl_guestpoke.c runtime/kl_cacerts.c runtime/media/kl_phonon_hrtf.S \
-           runtime/media/kl_menu_font.S \
+           runtime/media/kl_menu_font.S runtime/media/kl_unicode.m \
            runtime/diag/kl_sample.c runtime/diag/kl_mprobe.c runtime/diag/kl_stall.c runtime/diag/kl_metrics.c \
            runtime/guest/kl_songprobe.c runtime/guest/kl_scotland2.c runtime/guest/kl_aot_hooks.c \
            runtime/guest/kl_songs.c
@@ -1474,14 +1474,14 @@ build/xros/libklepton.dylib: build/xros/libklepton.a
 	@$(CC) -target arm64-apple-xros1.0 -isysroot $(XROS_SDK) -arch arm64 \
 	   -dynamiclib -o $@ -Wl,-all_load $< -lz -lc++ -framework AudioToolbox \
 	   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface \
-	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal \
+	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal -framework CoreText -framework CoreGraphics \
 	   -install_name @rpath/libklepton.dylib
 
 build/xrsim/libklepton.dylib: build/xrsim/libklepton.a
 	@$(CC) -target arm64-apple-xros1.0-simulator -isysroot $(XRSIM_SDK) -arch arm64 \
 	   -dynamiclib -o $@ -Wl,-all_load $< -lz -lc++ -framework AudioToolbox \
 	   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface \
-	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal \
+	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal -framework CoreText -framework CoreGraphics \
 	   -install_name @rpath/libklepton.dylib
 
 xros-device: build/xros/libklepton.dylib

@@ -26,7 +26,7 @@ assert profile['elf_sha256']==hashlib.sha256(source.read_bytes()).hexdigest()
  'targets':[profile['target']]},indent=2)+'\n')
 PY
   fi
-  if [[ "${SC2_TEST_SET:-hooks}" = customtypes || "${SC2_TEST_SET:-hooks}" = lapiz || "${SC2_TEST_SET:-hooks}" = bsml || "${SC2_TEST_SET:-hooks}" = songcore || "${SC2_TEST_SET:-hooks}" = metacore || "${SC2_TEST_SET:-hooks}" = songdownloader ]]; then
+  if [[ "${SC2_TEST_SET:-hooks}" = customtypes || "${SC2_TEST_SET:-hooks}" = lapiz || "${SC2_TEST_SET:-hooks}" = bsml || "${SC2_TEST_SET:-hooks}" = songcore || "${SC2_TEST_SET:-hooks}" = metacore || "${SC2_TEST_SET:-hooks}" = songdownloader || "${SC2_TEST_SET:-hooks}" = coremods ]]; then
     python3 - "$NAME" "$SOURCE" "$OUT" <<'PYCT'
 from pathlib import Path
 import hashlib,json,sys
@@ -36,7 +36,7 @@ assert profile['sha256']==hashlib.sha256(source.read_bytes()).hexdigest()
 p=out/(name+'.manifest.json');d=json.loads(p.read_text());d['targets']+=profile['targets']
 import os
 from collections import Counter
-mods={'lapiz':['lapiz'],'bsml':['lapiz','bsml'],'songcore':['lapiz','bsml','songcore'],'metacore':['lapiz','bsml','songcore','metacore'],'songdownloader':['lapiz','bsml','songcore','metacore','playlistcore']}.get(os.environ.get('SC2_TEST_SET'),[])
+mods={'lapiz':['lapiz'],'bsml':['lapiz','bsml'],'songcore':['lapiz','bsml','songcore'],'metacore':['lapiz','bsml','songcore','metacore'],'songdownloader':['lapiz','bsml','songcore','metacore','playlistcore'],'coremods':['lapiz','bsml','songcore','metacore','playlistcore','datakeeper','fakeid','unicode']}.get(os.environ.get('SC2_TEST_SET'),[])
 original_counts=Counter()
 for mod in mods if name=='libil2cpp' else []:
  catalog=json.loads(Path('build/scotland2/android-'+mod+'/hook-catalog.json').read_text())

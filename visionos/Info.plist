@@ -6,6 +6,8 @@
     <string>$(KL_SCOTLAND2_TEST)</string>
     <key>KLScotland2MetaCore</key>
     <string>$(KL_SCOTLAND2_METACORE)</string>
+    <key>KLScotland2CoreMods</key>
+    <string>$(KL_SCOTLAND2_COREMODS)</string>
     <key>KLScotland2SongDownloader</key>
     <string>$(KL_SCOTLAND2_SONGDOWNLOADER)</string>
     <key>KLScotland2SongCore</key>

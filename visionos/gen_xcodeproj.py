@@ -177,22 +177,24 @@ ANGLE_DIR = "Frameworks"
 # one means, which is why main() reports them separately.
 SC2 = ["Scotland2Core", "SC2_libtinyxml2"] if os.environ.get("KLEPTON_SCOTLAND2") == "1" else []
 if SC2:
-    if os.environ.get('SC2_TEST_SET', 'tinyxml2') in ('paper','hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET', 'tinyxml2') in ('paper','hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader','coremods'):
         SC2.append('SC2_libpaper2_scotland2')
-    if os.environ.get('SC2_TEST_SET') in ('hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET') in ('hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader','coremods'):
         SC2 += ['SC2_'+name for name in ['libbeatsaber-hook','libsl2_abi','libcxx_shared','libsc2_flamingo','libsc2_flamingo_probe']]
-    if os.environ.get('SC2_TEST_SET') in ('customtypes','lapiz','bsml','songcore','metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET') in ('customtypes','lapiz','bsml','songcore','metacore','songdownloader','coremods'):
         SC2 += ['SC2_libcustom-types','SC2_libsc2_customtypes_probe']
-    if os.environ.get('SC2_TEST_SET') in ('lapiz','bsml','songcore','metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET') in ('lapiz','bsml','songcore','metacore','songdownloader','coremods'):
         SC2 += ['SC2_liblapiz']
-    if os.environ.get('SC2_TEST_SET') in ('bsml','songcore','metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET') in ('bsml','songcore','metacore','songdownloader','coremods'):
         SC2 += ['SC2_libbsml','SC2_libsc2_bsml_probe']
-    if os.environ.get('SC2_TEST_SET') in ('songcore','metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET') in ('songcore','metacore','songdownloader','coremods'):
         SC2 += ['SC2_libsongcore','SC2_libsc2_songcore_probe']
-    if os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader'):
+    if os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader','coremods'):
         SC2 += ['SC2_'+name for name in ['libmetacore','libsc2_metacore_probe','libweb-utils','libbeatsaverplusplus','libzip','libsongdetails']]
-    if os.environ.get('SC2_TEST_SET') == 'songdownloader':
+    if os.environ.get('SC2_TEST_SET') in ('songdownloader','coremods'):
         SC2 += ['SC2_libplaylistcore','SC2_libsongdownloader']
+    if os.environ.get('SC2_TEST_SET') == 'coremods':
+        SC2 += ['SC2_libdatakeeper','SC2_libFakeId','SC2_libunicode']
     if KLT['name'] != 'beatsaber140' or os.environ.get('KLEPTON_BUNDLE_ID') != 'dev.klepton.beatsaber140.scotland2.test':
         raise SystemExit('Scotland2 is restricted to the existing separate test app bundle identifier.')
     for name in SC2:
@@ -598,12 +600,13 @@ APP_BUILD = _plist_version("KLEPTON_APP_BUILD", "1")
 COMMON = f"""
                 KL_SCOTLAND2_TEST = "{1 if SC2 else 0}";
                 KL_SCOTLAND2_CUSTOMTYPES = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='customtypes' else 0}";
-                KL_SCOTLAND2_METACORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader') else 0}";
-                KL_SCOTLAND2_SONGDOWNLOADER = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='songdownloader' else 0}";
-                KL_SCOTLAND2_SONGCORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('songcore','metacore','songdownloader') else 0}";
-                KL_SCOTLAND2_BSML = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('bsml','songcore','metacore','songdownloader') else 0}";
+                KL_SCOTLAND2_METACORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader','coremods') else 0}";
+                KL_SCOTLAND2_SONGDOWNLOADER = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('songdownloader','coremods') else 0}";
+                KL_SCOTLAND2_COREMODS = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='coremods' else 0}";
+                KL_SCOTLAND2_SONGCORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('songcore','metacore','songdownloader','coremods') else 0}";
+                KL_SCOTLAND2_BSML = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('bsml','songcore','metacore','songdownloader','coremods') else 0}";
                 KL_SCOTLAND2_LAPIZ = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='lapiz' else 0}";
-                KL_SCOTLAND2_HOOKS = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader') else 0}";
+                KL_SCOTLAND2_HOOKS = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader','coremods') else 0}";
 				CLANG_ENABLE_MODULES = YES;
 {ENTITLEMENTS_SETTING}				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = {APP_BUILD};
@@ -670,7 +673,7 @@ COMMON = f"""
 				// second target needed one. The failure is a link error naming
 				// VTDecompressionSession*, which reads as a missing SDK rather
 				// than as a build setting that was never updated.
-				OTHER_LDFLAGS = "-lz -lc++ -framework AudioToolbox -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface";
+				OTHER_LDFLAGS = "-lz -lc++ -framework AudioToolbox -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface -framework CoreText -framework CoreGraphics";
 				PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE_ID};
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = xros;

@@ -78,3 +78,35 @@ collector on main/worker threads with OBB indexing, plus a positive UE4 listing.
 Historical development notes under `ports/scotland2` describe earlier stages;
 the verified scope at the top of this document supersedes their pending-status
 statements. Further gameplay and persistence testing remains necessary.
+
+## Remaining three core mods: host checked, device verification pending
+
+`SC2_TEST_SET=coremods` packages the full eleven-mod composition. The device
+update builds and signs successfully; it has not yet been installed/tested on
+the physical headset because its developer connection was unavailable. The
+earlier eight-mod custom-song build remains the verified playback baseline.
+
+- PlayerDataKeeper0.2.5: original WriteAllText and File.Replace hooks back up
+  normal and local save files, omit temporary files and restore them through
+  original setup; tested with actual IL2CPP save APIs in an isolated fixture.
+  The shared loader now reports the application's existing /files directory,
+  matching its JNI paths. The upstream one-time lighting reset is disabled to
+  preserve existing effects preferences. No saves are moved.
+- FakeID0.1.9: original hook and exact AutoHooks header dependency retained.
+  A controlled original-return fixture with real IL2CPP objects tests both the
+  unknown-category update and preservation of existing adult preferences.
+- Unicode0.1.7: original TMP hooks, style keys, glyph cache and texture atlas
+  retained. Android platform font drawing is adapted to Apple CoreText through
+  a flat C ABI. Tests exercise real CJK and color-emoji glyphs through both
+  native and Android-module paths; styles, whitespace and invalid scalars are
+  checked. Unity texture upload/cache and a temporary menu label still need
+  physical verification.
+
+Run `bash ports/scotland2/test-remaining-core.sh` only in the prepared developer
+environment. Its save/restore fixture is host-only; never invoke that diagnostic
+on a user's live game data. On-device observers verify nine added hooks and
+schedule the actual Unicode/TMP glyph-cache check.
+
+The current generator still guards the existing local test bundle identifier.
+A generic installer with recipient-specific bundle IDs and automatic dependency
+setup is separate unfinished work; these are developer build notes.

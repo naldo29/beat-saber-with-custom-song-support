@@ -11,6 +11,8 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 static char failure[512];
 static int started, init_finished;
@@ -41,6 +43,7 @@ static char songcore_profile_path[4096],songcore_probe_path[4096];
 static char metacore_profile_path[4096],metacore_probe_path[4096];
 static char playlistcore_profile_path[4096];
 static int songdownloader_probe;
+static char remaining_profile_root[4096];
 static int verify_mod_hooks(const char *,const char *,unsigned);
 static const int bridge_handle;
 static int (*after_init)(void);
@@ -210,8 +213,17 @@ int kl_scotland2_start(void) {
         root = metadata;
     }
     if (configure(&api, root, "com.beatgames.beatsaber", kl_jni_vm())) return stop(core_error());
-    const char *files = kl_jni_files_dir();
-    if (set_paths(files, files, path, "libil2cpp.so")) return stop(core_error());
+    // Match Context.getFilesDir/getExternalFilesDir: kl_jni_files_dir is the
+    // emulated storage root, while the application's persistent data is /files.
+    // Mods that back up the sibling no_backup directory depend on this shape.
+    const char *files=kl_jni_files_dir();
+    char app_files[4096];
+    int app_n=snprintf(app_files,sizeof app_files,"%s/files",kl_jni_files_dir());
+    if(app_n<0 || (size_t)app_n>=sizeof app_files)return stop("application files path too long");
+    if(mkdir(app_files,0755) && errno!=EEXIST)return stop("cannot create application files directory");
+    struct stat app_stat;
+    if(stat(app_files,&app_stat) || !S_ISDIR(app_stat.st_mode))return stop("application files path is not a directory");
+    if (set_paths(app_files, app_files, path, "libil2cpp.so")) return stop(core_error());
     // Import resolution must see the C API before any mod constructors run.
     native_core = core;
     if (kl_env_on("KL_SCOTLAND2_NATIVE_GATES",0)) {
@@ -255,6 +267,10 @@ int kl_scotland2_start(void) {
         if(!target || !replacement || !kl_aot_original(target) || kl_aot_exchange(target,replacement,&original))
             return stop("beatsaber-hook filesystem helper missing or not prepared");
         fprintf(stderr,"[scotland2] FILESYSTEM_READY upstream mkpath uses direct guest directory creation through signed prepared entry\n");
+    }
+    if(kl_env_on("KL_SCOTLAND2_REMAINING_CORE",0)) {
+        int n=snprintf(remaining_profile_root,sizeof remaining_profile_root,"%s/profiles",root);
+        if(n<0 || (size_t)n>=sizeof remaining_profile_root)return stop("remaining core profiles path too long");
     }
     if (open_early()) return stop(core_error());
     if (kl_env_on("KL_SCOTLAND2_CUSTOMTYPES_PROBE",0)) {
@@ -403,6 +419,22 @@ static int after_original_scene_call(void) {
         int (*run)(void)=browser?kl_sym(browser,"sc2_test_songdownloader_late"):NULL;
         if(!browser || kl_get_stats(browser)->imports_missing || !run || run())return stop("SongDownloader original menu registration missing");
         fprintf(stderr,"[scotland2] SONGDOWNLOADER_LATE_OK actual original callbacks, eight PlaylistCore hooks and five/four custom types; in-game browsing/download/playback still require interaction\n");
+    }
+    if(*remaining_profile_root){
+        const char *mods[]={"datakeeper","fakeid","unicode"};
+        const char *libs[]={"libdatakeeper.so","libFakeId.so","libunicode.so"};
+        const unsigned counts[]={4,1,4};
+        for(unsigned i=0;i<3;++i){
+            char profile[4096];int n=snprintf(profile,sizeof profile,"%s/%s-hooks.txt",remaining_profile_root,mods[i]);
+            kl_image *mod=kl_find_image(libs[i]);
+            if(n<0 || (size_t)n>=sizeof profile || !mod || kl_get_stats(mod)->imports_missing)return stop("remaining core module missing or unresolved imports");
+            if(verify_mod_hooks(profile,libs[i],counts[i]))return -1;
+            fprintf(stderr,"[scotland2] COREMOD_READY %s imports=%u hooks=%u original callbacks completed\n",mods[i],kl_get_stats(mod)->imports_bound,counts[i]);
+        }
+        kl_image *unicode=kl_find_image("libunicode.so");
+        int (*observe)(void)=kl_sym(unicode,"sc2_test_unicode_lifecycle");
+        if(!observe||observe())return stop("Unicode platform glyph bridge failed");
+        fprintf(stderr,"[scotland2] REMAINING_CORE_LATE_OK all three original modules and nine hooks; Unicode Unity glyph observation scheduled\n");
     }
     return 0;
 }

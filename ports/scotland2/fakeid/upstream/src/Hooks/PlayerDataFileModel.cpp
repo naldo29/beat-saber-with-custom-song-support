@@ -1,0 +1,62 @@
+#include "autohooks/shared/hooks.hpp"
+
+// GlobalNamespace
+#include "GlobalNamespace/PlayerAgreements.hpp"
+#include "GlobalNamespace/PlayerData.hpp"
+#include "GlobalNamespace/PlayerDataFileModel.hpp"
+#include "GlobalNamespace/PlayerDataModel.hpp"
+#include "GlobalNamespace/PlayerSensitivityFlag.hpp"
+
+#ifdef SC2_AOT_HOOKS
+struct SC2BuildHookTarget { uint64_t address; uint32_t originalHook,reserved; char name[128]; };
+static_assert(sizeof(SC2BuildHookTarget)==144);
+#define SC2_RECORD_HOOK(name_, mPtr) \
+    static const SC2BuildHookTarget sc2_target_##name_ __attribute__((used,section(".sc2_hooks"))) = { \
+        ::il2cpp_utils::il2cpp_type_check::MetadataGetter<mPtr>::addrs, 0, 0, #name_ };
+#else
+#define SC2_RECORD_HOOK(name_, mPtr)
+#endif
+
+SC2_RECORD_HOOK(PlayerDataFileModel_Load, &GlobalNamespace::PlayerDataFileModel::LoadOrCreateFromJsonString)
+MAKE_LATE_HOOK_MATCH(
+    PlayerDataFileModel_Load,
+    &GlobalNamespace::PlayerDataFileModel::LoadOrCreateFromJsonString,
+    GlobalNamespace::PlayerData*,
+    GlobalNamespace::PlayerDataFileModel* self,
+    StringW jsonString
+) {
+    auto value = PlayerDataFileModel_Load(self, jsonString);
+
+    if (value->userAgeCategory != GlobalNamespace::UserAgeCategory::Adult) {
+        value->userAgeCategory = GlobalNamespace::UserAgeCategory::Adult;
+        value->desiredSensitivityFlag = GlobalNamespace::PlayerSensitivityFlag::Explicit;
+        value->playerAgreements->playerSensitivityFlagVersion = 3;
+    }
+
+    return value;
+}
+
+#ifdef SC2_AOT_HOOKS
+// Host-only fixture: exercise this original hook body with real IL2CPP objects
+// and a controlled original-return value, restoring the installed trampoline.
+static GlobalNamespace::PlayerData* sc2_fakeid_fixture;
+static GlobalNamespace::PlayerData* sc2_fakeid_original(GlobalNamespace::PlayerDataFileModel*,StringW){return sc2_fakeid_fixture;}
+extern "C" __attribute__((visibility("default"))) int sc2_test_fakeid_behavior(){
+    using namespace GlobalNamespace;
+    auto *player=reinterpret_cast<PlayerData*>(il2cpp_functions::object_new(classof(PlayerData*)));
+    auto *agreements=reinterpret_cast<PlayerAgreements*>(il2cpp_functions::object_new(classof(PlayerAgreements*)));
+    if(!player||!agreements)return 1;
+    player->playerAgreements=agreements;player->userAgeCategory=UserAgeCategory::Unknown;
+    player->desiredSensitivityFlag=PlayerSensitivityFlag::Safe;agreements->playerSensitivityFlagVersion=0;
+    sc2_fakeid_fixture=player;auto previous=*Hook_PlayerDataFileModel_Load::trampoline();
+    *Hook_PlayerDataFileModel_Load::trampoline()=&sc2_fakeid_original;
+    auto *returned=Hook_PlayerDataFileModel_Load::hook_PlayerDataFileModel_Load(nullptr,nullptr);
+    bool changed=returned==player&&player->userAgeCategory==UserAgeCategory::Adult&&player->desiredSensitivityFlag==PlayerSensitivityFlag::Explicit&&agreements->playerSensitivityFlagVersion==3;
+    player->desiredSensitivityFlag=PlayerSensitivityFlag::Safe;agreements->playerSensitivityFlagVersion=9;
+    Hook_PlayerDataFileModel_Load::hook_PlayerDataFileModel_Load(nullptr,nullptr);
+    bool unchanged=player->desiredSensitivityFlag==PlayerSensitivityFlag::Safe&&agreements->playerSensitivityFlagVersion==9;
+    *Hook_PlayerDataFileModel_Load::trampoline()=previous;sc2_fakeid_fixture=nullptr;
+    if(!changed||!unchanged)return 2;
+    std::fprintf(stderr,"FAKEID_BEHAVIOR_OK original hook updates unknown category and preserves existing adult preferences\n");return 0;
+}
+#endif

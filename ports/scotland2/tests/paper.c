@@ -52,7 +52,8 @@ int main(int argc, char **argv) {
     const char *(*app_id)(void) = symbol(loader, "modloader_get_application_id");
     const char *(*files)(void) = symbol(loader, "modloader_get_files_dir");
     assert(app_id && !strcmp(app_id(), "com.beatgames.beatsaber"));
-    assert(files && !strcmp(files(), argv[1]));
+    char expected_files[4096];snprintf(expected_files,sizeof expected_files,"%s/files",argv[1]);
+    assert(files && !strcmp(files(), expected_files));
     assert(symbol(NULL, "modloader_get_application_id") == (void *)app_id);
     if (!kl_find_image("libsl2_abi.so"))
         assert(!symbol(loader,"_ZN9modloader13get_files_dirEv"));

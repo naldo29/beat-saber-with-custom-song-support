@@ -131,6 +131,27 @@ int main(int argc, char **argv) {
     size_t count = 0;
     assert(assemblies(domain, &count) && count > 0);
     assert(symbol(image,"il2cpp_init")==original);
+    if(getenv("SC2_REMAINING_CORE")) {
+        const char *names[]={"datakeeper","fakeid","unicode"};
+        const char *libs[]={"libdatakeeper.so","libFakeId.so","libunicode.so"};
+        const char *checks[]={"sc2_test_datakeeper_files","sc2_test_fakeid_behavior","sc2_test_unicode_raster"};
+        const unsigned counts[]={4,1,4};
+        for(unsigned i=0;i<3;++i){
+            char path[4096];snprintf(path,sizeof path,"%s/test-only/%s",getenv("SC2_REMAINING_META"),libs[i]);
+            kl_image *mod=kl_find_image(libs[i]);
+            if(!mod){mod=kl_scotland2_open_module(path,2);if(!mod){fprintf(stderr,"Remaining mod %s: %s\n",names[i],kl_error());return 1;}
+                typedef struct {const char*id,*version;uint64_t tag;} info_t;info_t info={0};
+                void (*setup)(info_t*)=kl_sym(mod,"setup");assert(setup);setup(&info);
+            }
+            assert(!kl_get_stats(mod)->imports_missing);
+            if(i){void (*late)(void)=kl_sym(mod,"late_load");assert(late);late();}
+            snprintf(path,sizeof path,"%s/android-%s/hook-profile.txt",getenv("SC2_REMAINING_BUILD"),names[i]);
+            verify_mod_hooks(image,path,libs[i],counts[i]);
+            int (*check)(void)=kl_sym(mod,checks[i]);assert(check);int result=check();
+            fprintf(stderr,"REMAINING_CORE_HOST %s imports=%u result=%d\n",names[i],kl_get_stats(mod)->imports_bound,result);if(result)return 1;
+        }
+        puts("REMAINING_CORE_HOST_OK original save backup/restore, age-hook behavior and actual Android-to-Apple glyph rendering");return 0;
+    }
     if (getenv("SC2_LAPIZ_CATALOG")) {
         puts("LAPIZ_EARLY_CALLBACK_OK actual Scotland2 dispatched Lapiz load after IL2CPP initialization.");
     }

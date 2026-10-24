@@ -39,8 +39,9 @@ replace the required modified Klepton runtime.
 - Every map format, every playlist feature, full-song completion and long sessions.
 - Restart/update persistence across all settings and scores.
 - Arbitrary third-party Quest mods. This is not a universal QMOD installer.
-- Unicode, PlayerDataKeeper and Fake ID: these three supplied core mods are not
-  enabled in the verified baseline.
+- The original custom-song baseline has eight core mods enabled. The remaining
+  Unicode, PlayerDataKeeper and Fake ID ports now build and pass host checks;
+  their all-eleven-mod device update is built/signed, but physical tests are pending.
 
 ## Source and credits
 

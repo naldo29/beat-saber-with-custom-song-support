@@ -1494,6 +1494,9 @@ struct BootView: View {
             if Bundle.main.object(forInfoDictionaryKey: "KLScotland2SongDownloader") as? String == "1" {
                 setenv("KL_SCOTLAND2_SONGDOWNLOADER_PROBE", "1", 0)
             }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2CoreMods") as? String == "1" {
+                setenv("KL_SCOTLAND2_REMAINING_CORE", "1", 0)
+            }
             setenv("KL_SONGS", "0", 0)
         }
         // Before the picture settings: it turns the game's own foveation off.

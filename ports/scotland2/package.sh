@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 PLATFORM="${1:-macosx}"
 TEST_SET="${SC2_TEST_SET:-tinyxml2}"
+if [ "$TEST_SET" = coremods ]; then exec bash ports/scotland2/package-coremods.sh "$PLATFORM"; fi
 if [ "$TEST_SET" = songdownloader ]; then exec bash ports/scotland2/package-songdownloader.sh "$PLATFORM"; fi
 if [ "$TEST_SET" = metacore ]; then exec bash ports/scotland2/package-metacore.sh "$PLATFORM"; fi
 if [ "$TEST_SET" = songcore ]; then exec bash ports/scotland2/package-songcore.sh "$PLATFORM"; fi

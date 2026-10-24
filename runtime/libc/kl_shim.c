@@ -6,6 +6,7 @@
 //                          kl_dl.c) and AAPCS64 variadic thunks (kl_va_thunks.S)
 //   3. local statics    — small bionic-isms defined right here
 #include <stdio.h>
+#include "kl_unicode.h"
 #include <stdlib.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -2441,6 +2442,7 @@ static const kl_entry g_shim[] = {
 
     // Released ZIP support also needs zlib's C error-string function.
     E("zError", zError),
+    E("sc2_unicode_draw_glyph", kl_unicode_draw_glyph),
 
     // stdio needing guest-FILE translation
     E("__sF", g_sF),
