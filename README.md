@@ -1,91 +1,54 @@
-# Klepton
+# Beat Saber with Custom Song Support
 
-Running Android ARM64 VR APKs on Apple Vision Pro, no JIT required!
+Standalone custom songs for the Quest version of Beat Saber on Apple Vision Pro,
+using Klepton and the actual Scotland2 mod stack. Forked from
+[myMartek/Klepton](https://github.com/myMartek/Klepton), built for AVP Play.
 
-## This fork: the AVP Play toolchain
+## What works
 
-This is the Klepton fork that [AVP Play](https://github.com/myMartek/avp-play) builds games with. The branch `avp-play` carries one commit per toolchain that shipped with an AVP Play release, on top of upstream [`shinyquagsire23/Klepton`](https://github.com/shinyquagsire23/Klepton) at `ce74582`, each tagged `toolchain-N`. Such a commit is the source in the `klepton-toolchain-N-<hash>.tar.gz` attached to that release; the hash in its subject and the short hashes in its message are the ones AVP Play's recipes name as `toolchain.minCommit`.
+Tested on a physical Vision Pro with Beat Saber **1.40.8_7379**:
 
-Day-to-day work happens in a private tree and lands here with each release, so the history is coarse. Pull requests against `avp-play` are welcome: a merged change is carried into the working tree and is part of the next toolchain. Reports about a game belong in [AVP Play's issues](https://github.com/myMartek/avp-play/issues).
+- Scotland2's real dependency loading and early/late mod startup.
+- Original SongDownloader in-game browsing, downloading and extraction.
+- Original SongCore loading and playback of downloaded custom songs.
+- Repeated downloads: SongCore loaded one, then two, then three songs in the tested session.
+- custom-types, Lapiz, BSML, Paperlog, MetaCore and PlaylistCore running together.
 
-`main` follows upstream unchanged.
+This uses the original mods. The separate earlier song-loader prototype is disabled
+(`KL_SONGS=0`) in the Scotland2 build.
 
-## Architecture
+## Installation status
 
-`klepton-ld` translates Android `.so` libraries into loadable Apple `.dylib` and `.framework` libraries, which then link into the Klepton runtime. Klepton currently focuses on Java-thin applications only (no ART, no JVM).
+**Developer source preview. There is no ready-to-install public IPA or one-click
+AVP Play integration yet.** The successful build was assembled and tested locally.
+A fresh-machine dependency/bootstrap process still needs packaging and validation.
+See [CUSTOM-SONGS.md](CUSTOM-SONGS.md) for the build layout and limitations, and
+[BUILDING.md](BUILDING.md) for the underlying Klepton prerequisites.
 
-For graphics, GLES 3.2 is translated to a vendored ANGLE GLES 3.0 (with its Metal backend), and Vulkan is translated to MoltenVK.
+Bring your own purchased Beat Saber game files. This repository contains no APK,
+OBB, translated Beat Saber frameworks, saved games, songs, or Apple signing keys.
+The prepared hooks are tied to the exact tested game build; other versions must
+be independently prepared and verified.
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  GUEST (translated Mach-O, instruction bytes mostly unmodified) │
-│  libil2cpp · libunity · libunityopus · libmain · burst · ...    │
-└─────────────────────────────────────────────────────────────────┘
-    ↕ imports resolved to Klepton runtime in `klepton-ld`
-┌─────────────────────────────────────────────────────────────────┐
-│  libklepton_bionic   libc/libm/libdl/pthread/liblog → libSystem │
-│  libklepton_ndk      ALooper · ANativeWindow · ASensor · AAsset │ 
-│  libklepton_jni      synthetic JavaVM / JNIEnv                  │
-│  libklepton_ovrp     ovrp_* reimplementation                    │
-│  ...                                                            │
-└─────────────────────────────────────────────────────────────────┘
-    ↕ Frontend platform (`mains`) and OS-specifics
-┌─────────────────────────────────────────────────────────────────┐
-│  MoltenVK (Vulkan → Metal)     ANGLE (GLES 3.0)                 │
-│  Compositor Services · ARKit · GameController · AVAudioEngine   │
-└─────────────────────────────────────────────────────────────────┘
-```
+The result installed on a headset is one visionOS app with the adapted mods
+baked into its signed bundle. An Android APK patched with mods alone cannot
+replace the required modified Klepton runtime.
 
-While both Android and macOS reserve x18, some (a lot of) older Android applications still use x18, and macOS zeros x18 on context switches. All usage of x18 is patched by `klepton-ld` so that per-library TLS slots are used instead.
+## What is still unverified
 
-Klepton also has the ability to load and patch `.so` files at runtime with `mmap`, but this is only really useful on macOS where JIT is actually allowed. It's likely that some applications will require JIT if they happen to utilize scripting runtimes that expect it (LuaJIT, V8, whatever else).
+- Every map format, every playlist feature, full-song completion and long sessions.
+- Restart/update persistence across all settings and scores.
+- Arbitrary third-party Quest mods. This is not a universal QMOD installer.
+- Unicode, PlayerDataKeeper and Fake ID: these three supplied core mods are not
+  enabled in the verified baseline.
 
-## Building
+## Source and credits
 
-See [`BUILDING.md`](BUILDING.md) for the full guide. The short version:
-
-```bash
-brew install pkg-config sdl3 apktool          # host dependencies
-apktool d -f -o beatsaber beatsaber.apk       # you supply the APK; see BUILDING.md
-make check                                    # full regression sweep
-```
-
-Quick run scripts:
-
-```bash
-./build_run_viewer.sh [target] # build and run macOS frontend
-./build_run_vpro.sh [target]  # build and run Vision Pro frontend
-./build_run_host.sh [target]  # build and run a guest headless, with a summary
-./build_run_host.sh steamlink-vr --shell --view  # Steam VR Link frontend (WIP)
-```
-
-Where `[target]` is the name of the target, defaulting to `beatsaber`.
-
-## Status
-
-Currently working well on both macOS and visionOS with minor-to-no graphical issues:
-
-- Beat Saber versions 1.6, 1.28, and 1.40
-- BONELAB
-- SUPERHOT VR
-- Resident Evil 4 VR
-- OpenBrush (OpenXR)
-- OpenJK XR (Team Beef)
-- Counter Strike
-- Half Life
-- Half Life 2
-- Portal
-- Vice City
-- Into the Radius
-- Red Matter 2
-- Vampire: The Masquerade - Justice
-
-WIP or not in a great state:
-
-- Steam VR Link (no AWDL mitigations due to entitlement restrictions, XR_EXT_hand_tracking not implemented yet)
-- Xbox Cloud Gaming — a separate build that is essentially a web app (a PWA wrapper around the streaming client), not a translated APK
-- ZIX
-
-Abandoned due to anticheat, JIT mmaping, or other problems:
-
-- VRChat (Steam Frame APK)
+Klepton is by Max Thomas, with the AVP Play toolchain work by myMartek and its
+contributors. Original upstream documentation is retained in
+[UPSTREAM-README.md](UPSTREAM-README.md). Original mod sources, licenses, version
+pins and source patches are under [ports/scotland2](ports/scotland2). Dependency
+pins are under `port-deps/sources`; the public QMOD inventory is under
+`port-results/coremods/coremods-lock.json`. Generated builds, device logs and
+private signing material are excluded. Retain the relevant upstream licenses
+when redistributing components.

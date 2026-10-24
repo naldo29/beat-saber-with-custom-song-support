@@ -1,0 +1,41 @@
+--- a/src/Utils/WebUtils.cpp
++++ b/src/Utils/WebUtils.cpp
+@@ -5,11 +5,20 @@
+ #include "libcurl/shared/curl.h"
+ #include "libcurl/shared/easy.h"
+ #include <sstream>
++#include <cstdlib>
+ 
+ #define TIMEOUT 10
+ #define USER_AGENT "QuestSongDownloader/" VERSION " (+https://github.com/darknight1050/SongDownloader)"
+ 
+ namespace WebUtils {
++    // Standalone platform trust asset; retain the original curl request code.
++    static void ConfigureTLS(CURL* curl) {
++        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
++        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
++        if (const char* ca=std::getenv("KL_SCOTLAND2_CA_BUNDLE"); ca && *ca)
++            curl_easy_setopt(curl, CURLOPT_CAINFO, ca);
++    }
++
+ 
+     //https://stackoverflow.com/a/55660581
+     std::string query_encode(const std::string& s)
+@@ -129,7 +138,7 @@
+ 
+         curl_easy_setopt(curl, CURLOPT_WRITEDATA, reinterpret_cast<void*>(&val));
+         curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
+-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
++        ConfigureTLS(curl);
+ 
+         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+ 
+@@ -194,7 +203,7 @@
+                 long httpCode(0);
+                 curl_easy_setopt(curl, CURLOPT_WRITEDATA, &val);
+                 curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
+-                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
++                ConfigureTLS(curl);
+ 
+                 curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+ 

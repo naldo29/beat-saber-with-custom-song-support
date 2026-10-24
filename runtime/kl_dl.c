@@ -11,6 +11,7 @@
 #include <wchar.h>
 #include "kl_egl.h"
 #include "guest/kl_driver.h"
+#include "guest/kl_scotland2.h"
 #include "kl_jni.h"
 #include "kl_opensl.h"
 #include "kl_ovrp.h"
@@ -301,6 +302,7 @@ void *kl_guest_sym_global(const char *name) {
     for (int i = 0; i < g_nimgs && !v; i++)
         v = kl_sym(g_imgs[i].img, name);
     pthread_mutex_unlock(&g_lock);
+    if (!v) v = kl_scotland2_sym(name);
     if (v) { void *w = kl_fmod_interpose(name, v); if (w) return w; }
     return v;
 }
@@ -312,6 +314,7 @@ void *kl_guest_sym_global(const char *name) {
 // Names Klepton serves from its own shims rather than from a bundled file, so
 // a missing file for one of these is expected, not a packaging error.
 static int kl_dep_is_shim_served(const char *name) {
+    if (kl_scotland2_claims(name)) return 1;
     static const char *shim[] = {
         "libc.so", "libm.so", "libdl.so", "liblog.so", "libstdc++.so",
         "libGLESv1_CM.so", "libGLESv2.so", "libGLESv3.so", "libEGL.so",
@@ -418,6 +421,14 @@ kl_image *kl_load_recursive(const char *path) {
 
     kl_image *img = kl_load_auto(path);
     if (!img) return NULL;
+    if (kl_scotland2_strict_load() && kl_get_stats(img)->imports_missing) {
+        unsigned n=0;const char *const *missing=kl_missing_imports(img,&n);
+        fprintf(stderr,"  [scotland2] rejecting %s before constructors: %u unresolved imports\n",path,n);
+        for(unsigned i=0;i<n;++i)fprintf(stderr,"  [scotland2] missing import: %s\n",missing[i]);
+        snprintf(g_dlerr,sizeof g_dlerr,"dlopen failed: unresolved symbol %.160s",n?missing[0]:"(unknown)");
+        kl_unload(img);
+        return NULL;
+    }
     kl_register_image(path, img);
     kl_run_init(img);
     kl_maybe_jni_onload(path, img);
@@ -554,7 +565,7 @@ int kl_can_dlopen(const char *path) {
            kl_ovrplat_claims(path) || kl_steamapi_claims(path) || kl_mediandk_claims(path) ||
            kl_vulkan_claims(path) || kl_aaudio_claims(path) ||
            kl_ndk_claims(path)    || kl_mxa_claims(path)    ||
-           kl_openxr_claims(path) || kl_core_shim_claims(path) || kl_can_load(path);
+           kl_openxr_claims(path) || kl_core_shim_claims(path) || kl_scotland2_claims(path) || kl_can_load(path);
 }
 
 // KL_DLOPEN_REFUSE=<substr>[,<substr>...] — refuse these by name, as if the
@@ -760,6 +771,8 @@ void *klb_dlopen(const char *path, int flags) {
     (void)flags;
     { static int once; if (!once) { once = 1; kl_dl_trace_shims(); } }
     if (!path) return (void *)-1;                    // RTLD_DEFAULT-ish: whole process
+    void *sc2 = kl_scotland2_dlopen(path);
+    if (sc2) return sc2;
     // Before the refusals: this one stands in for a library that IS refused.
     void *mxa = kl_mxa_dlopen(path);
     if (mxa) return mxa;
@@ -841,7 +854,8 @@ void *klb_dlopen(const char *path, int flags) {
         // path spelling (~150 chars) overflowed its 1024-byte buffer into a
         // __strlen_chk abort. The full detail still goes to the log below.
         const char *base = strrchr(path, '/'); base = base ? base + 1 : path;
-        snprintf(g_dlerr, sizeof g_dlerr, "dlopen failed: library \"%s\" not found", base);
+        if (!kl_scotland2_strict_load() || !g_dlerr[0])
+            snprintf(g_dlerr, sizeof g_dlerr, "dlopen failed: library \"%s\" not found", base);
         fprintf(stderr, "  [klepton] guest dlopen(\"%s\") FAILED: %s\n", path, kl_error());
         // KL_TRACE_DLOPEN_FRAMES=1 — who asked. A P/Invoke that cannot resolve
         // throws from IL2CPP's resolver, and the managed method that declared it
@@ -928,6 +942,11 @@ static void *klb_dlsym_null(const char *name) {
 }
 
 void *klb_dlsym(void *handle, const char *name) {
+    if (kl_scotland2_is_handle(handle)) {
+        void *symbol = kl_scotland2_sym(name);
+        if (!symbol) snprintf(g_dlerr, sizeof g_dlerr, "klepton: unsupported Scotland2 export: %s", name);
+        return symbol;
+    }
     if (kl_mxa_is_handle(handle)) return kl_mxa_sym(name);
     if (kl_egl_is_handle(handle)) return kl_egl_sym(name);
     if (kl_opensl_is_handle(handle)) return kl_opensl_sym(name);
@@ -957,6 +976,8 @@ void *klb_dlsym(void *handle, const char *name) {
             void *v = kl_sym(g_imgs[i].img, name);
             if (v) return v;
         }
+        s = kl_scotland2_sym(name);
+        if (s) return s;
         snprintf(g_dlerr, sizeof g_dlerr, "klepton: undefined symbol: %s", name);
         return klb_dlsym_null(name);
     }
@@ -976,6 +997,7 @@ void *klb_dlsym(void *handle, const char *name) {
     void *v = kl_sym((kl_image *)handle, name);
     if (!v) { snprintf(g_dlerr, sizeof g_dlerr, "klepton: undefined symbol: %s", name);
               return klb_dlsym_null(name); }
+    { void *w = kl_scotland2_interpose(handle, name, v); if (w) return w; }
     { void *w = kl_dl_interpose(name, v); if (w) return w; }
     return v;
 }

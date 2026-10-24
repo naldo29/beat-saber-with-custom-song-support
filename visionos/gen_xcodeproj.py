@@ -175,7 +175,30 @@ ANGLE_DIR = "Frameworks"
 # Both sets are embedded-not-linked, so the pbxproj treatment is identical and
 # the generator stays data-driven — the two lists differ only in what a missing
 # one means, which is why main() reports them separately.
-EMBED = GUEST + ANGLE + MVK
+SC2 = ["Scotland2Core", "SC2_libtinyxml2"] if os.environ.get("KLEPTON_SCOTLAND2") == "1" else []
+if SC2:
+    if os.environ.get('SC2_TEST_SET', 'tinyxml2') in ('paper','hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader'):
+        SC2.append('SC2_libpaper2_scotland2')
+    if os.environ.get('SC2_TEST_SET') in ('hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader'):
+        SC2 += ['SC2_'+name for name in ['libbeatsaber-hook','libsl2_abi','libcxx_shared','libsc2_flamingo','libsc2_flamingo_probe']]
+    if os.environ.get('SC2_TEST_SET') in ('customtypes','lapiz','bsml','songcore','metacore','songdownloader'):
+        SC2 += ['SC2_libcustom-types','SC2_libsc2_customtypes_probe']
+    if os.environ.get('SC2_TEST_SET') in ('lapiz','bsml','songcore','metacore','songdownloader'):
+        SC2 += ['SC2_liblapiz']
+    if os.environ.get('SC2_TEST_SET') in ('bsml','songcore','metacore','songdownloader'):
+        SC2 += ['SC2_libbsml','SC2_libsc2_bsml_probe']
+    if os.environ.get('SC2_TEST_SET') in ('songcore','metacore','songdownloader'):
+        SC2 += ['SC2_libsongcore','SC2_libsc2_songcore_probe']
+    if os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader'):
+        SC2 += ['SC2_'+name for name in ['libmetacore','libsc2_metacore_probe','libweb-utils','libbeatsaverplusplus','libzip','libsongdetails']]
+    if os.environ.get('SC2_TEST_SET') == 'songdownloader':
+        SC2 += ['SC2_libplaylistcore','SC2_libsongdownloader']
+    if KLT['name'] != 'beatsaber140' or os.environ.get('KLEPTON_BUNDLE_ID') != 'dev.klepton.beatsaber140.scotland2.test':
+        raise SystemExit('Scotland2 is restricted to the existing separate test app bundle identifier.')
+    for name in SC2:
+        if not os.path.isdir(os.path.join(HERE, 'Frameworks', name + '.xcframework')):
+            raise SystemExit('Run bash ports/scotland2/package.sh xros before generating the Scotland2 app.')
+EMBED = GUEST + ANGLE + MVK + SC2
 
 
 def detect_team():
@@ -503,6 +526,11 @@ swift_filerefs = "\n".join(
 swift_children = "\n".join(f'\t\t\t\t{s["ref"]},' for s in swift)
 swift_sources  = "\n".join(f'\t\t\t\t{s["bld"]},' for s in swift)
 F_RT    = oid("FRT");   B_RT_LNK = oid("BRTLK")
+SC2_REF = oid("FSC2META"); SC2_BUILD = oid("BSC2META")
+sc2_buildfile = f'{SC2_BUILD} = {{isa = PBXBuildFile; fileRef = {SC2_REF}; }};' if SC2 else ''
+sc2_filereference = f'{SC2_REF} = {{isa = PBXFileReference; lastKnownFileType = folder; path = Scotland2Metadata; sourceTree = "<group>"; }};' if SC2 else ''
+sc2_resource = f'{SC2_BUILD},' if SC2 else ''
+sc2_group = f'{SC2_REF},' if SC2 else ''
 
 # One file ref + one embed build-file per embedded framework.
 guest = [{"name": g, "ref": oid(f"FG{i}"), "emb": oid(f"BG{i}"),
@@ -568,6 +596,14 @@ APP_VERSION = _plist_version("KLEPTON_APP_VERSION", "1.0")
 APP_BUILD = _plist_version("KLEPTON_APP_BUILD", "1")
 
 COMMON = f"""
+                KL_SCOTLAND2_TEST = "{1 if SC2 else 0}";
+                KL_SCOTLAND2_CUSTOMTYPES = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='customtypes' else 0}";
+                KL_SCOTLAND2_METACORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader') else 0}";
+                KL_SCOTLAND2_SONGDOWNLOADER = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='songdownloader' else 0}";
+                KL_SCOTLAND2_SONGCORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('songcore','metacore','songdownloader') else 0}";
+                KL_SCOTLAND2_BSML = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('bsml','songcore','metacore','songdownloader') else 0}";
+                KL_SCOTLAND2_LAPIZ = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='lapiz' else 0}";
+                KL_SCOTLAND2_HOOKS = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('hooks','customtypes','lapiz','bsml','songcore','metacore','songdownloader') else 0}";
 				CLANG_ENABLE_MODULES = YES;
 {ENTITLEMENTS_SETTING}				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = {APP_BUILD};
@@ -660,6 +696,7 @@ PBX = f"""// !$*UTF8*$!
 	objects = {{
 
 /* Begin PBXBuildFile section */
+{sc2_buildfile}
 {swift_buildfiles}
 		{B_C} /* kl_app.c in Sources */ = {{isa = PBXBuildFile; fileRef = {F_C}; }};
 		{B_ASSETS} /* Assets.xcassets in Resources */ = {{isa = PBXBuildFile; fileRef = {F_ASSETS}; }};
@@ -668,6 +705,7 @@ PBX = f"""// !$*UTF8*$!
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+{sc2_filereference}
 		{PRODUCT} /* {NAME}.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = {NAME}.app; sourceTree = BUILT_PRODUCTS_DIR; }};
 {swift_filerefs}
 		{F_C} = {{isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = kl_app.c; sourceTree = "<group>"; }};
@@ -711,6 +749,7 @@ PBX = f"""// !$*UTF8*$!
 				{G_FW},
 				{G_PROD},
 				{F_ASSETS},
+                {sc2_group}
 			);
 			sourceTree = "<group>";
 		}};
@@ -795,6 +834,7 @@ PBX = f"""// !$*UTF8*$!
 			buildActionMask = 2147483647;
 			files = (
 				{B_ASSETS},
+                {sc2_resource}
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		}};

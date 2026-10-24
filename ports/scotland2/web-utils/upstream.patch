@@ -1,0 +1,50 @@
+--- a/src/DownloaderUtility.cpp
++++ b/src/DownloaderUtility.cpp
+@@ -4,10 +4,27 @@
+ #include "libcurl/shared/curl.h"
+ #include "libcurl/shared/easy.h"
+ #include <fmt/core.h>
++#include <fmt/ranges.h>
+ #include <filesystem>
+ #include <fstream>
++#include <cstdlib>
++#include <cctype>
+ 
+ namespace WebUtils {
++    // The Android curl build has no Apple trust-store default. Configure its
++    // original TLS implementation with the test app's explicit CA bundle.
++    static void ConfigureTLS(CURL* curl, const URLOptions& options) {
++        std::string scheme(options.protocol());
++        std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return std::tolower(c); });
++        const bool verify = options.useSSL || scheme == "https";
++        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verify ? 1L : 0L);
++        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, verify ? 2L : 0L);
++        if (verify) {
++            const char* ca = std::getenv("KL_SCOTLAND2_CA_BUNDLE");
++            if (ca && *ca) curl_easy_setopt(curl, CURLOPT_CAINFO, ca);
++        }
++    }
++
+     std::pair<char, char> getByteChars(char c) {
+         static char nibbleToChar[] = "0123456789abcdef";
+         auto lower = c & 0b1111;
+@@ -131,8 +148,7 @@
+ 
+         std::string userAgent = urlOptions.userAgent.value_or(this->userAgent);
+         curl_easy_setopt(curl, CURLOPT_USERAGENT, userAgent.c_str());
+-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, urlOptions.useSSL ? 1 : 0);
+-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, urlOptions.useSSL ? 2 : 0);
++        ConfigureTLS(curl, urlOptions);
+ 
+         response->CurlStatus = curl_easy_perform(curl);
+ 
+@@ -221,8 +237,7 @@
+ 
+         std::string userAgent = urlOptions.userAgent.value_or(this->userAgent);
+         curl_easy_setopt(curl, CURLOPT_USERAGENT, userAgent.c_str());
+-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, urlOptions.useSSL ? 1 : 0);
+-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, urlOptions.useSSL ? 2 : 0);
++        ConfigureTLS(curl, urlOptions);
+ 
+         int curlStatus = curl_easy_perform(curl);
+ 

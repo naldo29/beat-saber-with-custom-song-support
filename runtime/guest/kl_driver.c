@@ -28,6 +28,8 @@
 #include "kl_steamapi.h"
 #include "kl_mprobe.h"
 #include "kl_songs.h"
+#include "kl_songprobe.h"
+#include "kl_scotland2.h"
 #include "kl_sample.h"
 #include "kl_slink.h"
 #include "kl_ue4.h"
@@ -817,6 +819,7 @@ static int boot_linux(FILE *out) {
 }
 
 int kl_driver_boot(FILE *out) {
+    if (kl_scotland2_start() != 0) return fail(kl_scotland2_error());
     if (!g_target) return fail("kl_driver_init was not called");
     g_gap_only = kl_env_on("KL_GAP_ONLY", 0);
     int rc;
@@ -1132,6 +1135,7 @@ int kl_driver_frame(void) {
     kl_mprobe_nexus_frame_budget(g_frames);
     // Custom levels, from the same seat and for the same reason. Self-gated on a
     // CustomLevels directory existing, so every other guest pays one stat().
+    kl_songprobe_tick(kl_driver_target_name(), g_frames);
     kl_songs_tick(g_frames);
     if (g_alarm) alarm(0);
     g_frames++;

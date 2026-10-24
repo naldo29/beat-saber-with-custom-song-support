@@ -1460,6 +1460,42 @@ struct BootView: View {
         // The test switches first: none of these overwrites a value that is set, so a switch under
         // Advanced › Test wins over the picture setting it retunes (the foveation profile, 2026-10-13).
         KleptonTestSwitches.applyEnvironment()
+        // Only the separately identified loader test build enables this by default.
+        // An explicit KL_SCOTLAND2=0 still permits a baseline comparison.
+        if Bundle.main.object(forInfoDictionaryKey: "KLScotland2Test") as? String == "1" {
+            setenv("KL_SCOTLAND2", "1", 0)
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2Hooks") as? String == "1" {
+                setenv("KL_SCOTLAND2_ABI", "1", 0)
+                setenv("KL_SCOTLAND2_AOT_PROBE", "1", 0)
+                setenv("KL_SCOTLAND2_FLAMINGO", "1", 0)
+                setenv("KL_SCOTLAND2_FLAMINGO_PROBE", "1", 0)
+                setenv("KL_SCOTLAND2_SCENE_HOOK", "1", 0)
+            }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2CustomTypes") as? String == "1" {
+                setenv("KL_SCOTLAND2_CUSTOMTYPES_PROBE", "1", 0)
+            }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2Lapiz") as? String == "1" {
+                setenv("KL_SCOTLAND2_LAPIZ_PROBE", "1", 0)
+            }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2BSML") as? String == "1" {
+                setenv("KL_SCOTLAND2_BSML_PROBE", "1", 0)
+                setenv("KL_SCOTLAND2_FILESYSTEM", "1", 0)
+            }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2SongCore") as? String == "1" {
+                setenv("KL_SCOTLAND2_SONGCORE_PROBE", "1", 0)
+            }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2MetaCore") as? String == "1" {
+                setenv("KL_SCOTLAND2_NATIVE_GATES", "1", 0)
+                setenv("KL_SCOTLAND2_METACORE_PROBE", "1", 0)
+                if let ca = Bundle.main.path(forResource: "cacert", ofType: "pem", inDirectory: "Scotland2Metadata/certificates") {
+                    setenv("KL_SCOTLAND2_CA_BUNDLE", ca, 0)
+                }
+            }
+            if Bundle.main.object(forInfoDictionaryKey: "KLScotland2SongDownloader") as? String == "1" {
+                setenv("KL_SCOTLAND2_SONGDOWNLOADER_PROBE", "1", 0)
+            }
+            setenv("KL_SONGS", "0", 0)
+        }
         // Before the picture settings: it turns the game's own foveation off.
         KLRealityPresentSetting.applyEnvironment()
         KleptonRendering.shared.applyEnvironment()

@@ -1148,7 +1148,9 @@ static void dir_add_name(obb_dir *d, const char *name, char type) {
 }
 
 void *kl_obbmap_opendir(const char *dirpathin) {
-    if (!g_n || !dirpathin) return NULL;
+    // Unity indexes OBB audio banks with no Unreal loose-file base. An empty
+    // prefix must not claim real Unity directories as synthetic UE4 handles.
+    if (!g_n || !g_base_len || !dirpathin) return NULL;
     // UE4 lists its pak folder with a trailing slash ("<Project>/Content/Paks/");
     // matching children as "<dir>/<child>" then compares against the slash that
     // is already part of <dir>, and every entry is rejected — the synthesis

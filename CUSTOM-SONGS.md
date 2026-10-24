@@ -1,0 +1,80 @@
+# Custom-song developer build
+
+## Verified baseline
+
+Klepton base commit: `0333512150a91a9ac83ceeae6e89c2d9ddc44eb3`.
+Beat Saber: `1.40.8_7379`. Physical test: October 24, 2026.
+The user confirmed playback of a downloaded song and additional downloads;
+the log corroborated original SongCore loads of 1, 2 and 3 songs and a normal
+background exit, with no native fault marker. This is a tested source port,
+not an independent replacement for SongCore or SongDownloader.
+
+## Layout
+
+- `runtime/guest/kl_scotland2.*`: native loader bridge and lifecycle integration.
+- `runtime/guest/kl_aot_hooks.*`: dispatch through prepared, signed hook entries.
+- `ports/scotland2/`: adapted loader, original mod sources, patches, probes and builders.
+- `ports/scotland2/tools/prepare_hooks.py`: validates original game hashes and
+  instructions, then prepares hook gates before Apple code signing.
+- `port-deps/sources/*lock.json`: original dependency versions and checksums.
+- `port-results/coremods/coremods-lock.json`: public package/dependency inventory.
+
+## Build inputs
+
+An Apple-silicon Mac, Xcode with the visionOS platform, a paired headset in
+Developer Mode, and an Apple signing team are needed for device installation.
+Supply your own matching game under `beatsaber140/` and `beatsaber-1.40.apk`,
+following the original Klepton build guide. Game assets and OBB data are staged
+into the app's Documents separately from its executable bundle.
+
+The local port uses Android NDK r27c and the dependencies recorded in the lock
+files (including the matching IL2CPP headers, generated bs-cordl SDK, fmt,
+Capstone, mod SDK dependencies and the original released support libraries).
+Those downloaded trees and toolchains are not vendored here. The source snapshot
+contains the adapted mod trees, but does not yet automate every external input
+needed on a clean Mac. Do not interpret the commands below as a complete fresh
+installation guide.
+
+Once the pinned dependencies and game inputs are present, the tested composition
+is selected with `SC2_TEST_SET=songdownloader`. The development sequence is:
+
+1. Build `build/klepton-ld` and `make XROS_PLATFORMS=xros xros`.
+2. `SC2_TEST_SET=songdownloader bash ports/scotland2/package.sh xros`.
+3. Set `KLEPTON_TARGET=beatsaber140`, `KLEPTON_SCOTLAND2=1`,
+   `SC2_TEST_SET=songdownloader`, `KLEPTON_EVA=0`, `KLEPTON_LOW_LATENCY=0`,
+   and your own `KLEPTON_TEAM` and unique `KLEPTON_BUNDLE_ID`.
+4. In `visionos/`, run `mkguest.sh`, `mkangle.sh`, `mkmvk.sh`; then from the
+   repository root run `SC2_TEST_SET=songdownloader bash ports/scotland2/prepare-game-hooks.sh`.
+5. Generate the Xcode project with `visionos/gen_xcodeproj.py`, build/sign the
+   physical visionOS target, install with Xcode/Device Hub, and stage game data
+   with the original Klepton asset workflow using the same bundle identifier.
+
+`ports/scotland2/build-test-app.sh` is the historical local test helper and uses
+a fixed test bundle ID. It is not the public installer entry point. Keep the
+same bundle ID when updating your own installation to retain its data.
+
+## Why APK injection alone is insufficient
+
+Android mods normally patch executable code at runtime. The device port prepares
+selected game entry points before signing, and directs hooks through writable
+pointers at runtime. Several original mods embed their hook engines, requiring
+source rebuilding against the adapted shared backend. Native runtime support
+and prepared game frameworks belong in the visionOS app bundle, not just inside
+the Android APK. A future local patcher can automate this complete process.
+
+## Important shared fixes
+
+The port preserves original mod functionality while adapting common hook APIs,
+Android filesystem/C++ behavior and module data sharing. Specific corrections
+include standalone TLS certificate trust, a measured MetaCore native Unity
+cleanup target, and SongCore's empty selection guard.
+
+For nonempty song scans, Unity's OBB audio-bank index deliberately has no Unreal
+base path. Directory synthesis must decline that empty base. Without this guard
+a synthetic OBB handle could reach native `readdir` and crash after download.
+`ports/scotland2/test-songcore-directory-bridge.sh` tests the actual SongCore
+collector on main/worker threads with OBB indexing, plus a positive UE4 listing.
+
+Historical development notes under `ports/scotland2` describe earlier stages;
+the verified scope at the top of this document supersedes their pending-status
+statements. Further gameplay and persistence testing remains necessary.

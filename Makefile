@@ -79,6 +79,7 @@ RUNTIME_SHIP := $(LX_SRC) runtime/guest/kl_linuxproc.c \
            runtime/guest/kl_guestpoke.c runtime/kl_cacerts.c runtime/media/kl_phonon_hrtf.S \
            runtime/media/kl_menu_font.S \
            runtime/diag/kl_sample.c runtime/diag/kl_mprobe.c runtime/diag/kl_stall.c runtime/diag/kl_metrics.c \
+           runtime/guest/kl_songprobe.c runtime/guest/kl_scotland2.c runtime/guest/kl_aot_hooks.c \
            runtime/guest/kl_songs.c
 RUNTIME_DIAG := runtime/diag/kl_metadump.c
 RUNTIME := $(RUNTIME_SHIP) $(RUNTIME_DIAG)
@@ -104,6 +105,32 @@ RUNTIME_HDRS := $(RUNTIME_ALL_HDRS) $(wildcard tests/*.h) \
 
 .PHONY: all test clean check load vatest il2cpp boot jnislots x18 guest x18race uevk jniobj
 all: build/t_opus
+
+# Apple Scotland2 core: explicit host gate, separate from the stock runtime.
+SC2_CORE_SRC := $(wildcard ports/scotland2/src/*) $(wildcard ports/scotland2/include/*) \
+                $(wildcard ports/scotland2/upstream/src/*) \
+                $(wildcard ports/scotland2/upstream/shared/*) \
+                $(wildcard ports/scotland2/upstream/include/*) \
+                $(wildcard port-deps/sources/fmt/include/fmt/*) ports/scotland2/build.sh
+build/scotland2/macosx/libscotland2-core.a: $(SC2_CORE_SRC)
+	bash ports/scotland2/build.sh macosx
+
+build/t_scotland2: ports/scotland2/tests/klepton.c build/scotland2/macosx/libscotland2-core.a $(RUNTIME) $(RUNTIME_HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -Iports/scotland2/include -o $@ ports/scotland2/tests/klepton.c \
+	  $(RUNTIME) build/scotland2/macosx/libscotland2-core.a $(LDLIBS) -lc++
+
+build/t_scotland2_il2cpp: ports/scotland2/tests/il2cpp.c $(RUNTIME) $(RUNTIME_HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -o $@ ports/scotland2/tests/il2cpp.c $(RUNTIME) $(LDLIBS)
+
+build/t_scotland2_paper: ports/scotland2/tests/paper.c $(RUNTIME) $(RUNTIME_HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -o $@ ports/scotland2/tests/paper.c $(RUNTIME) $(LDLIBS)
+
+build/t_scotland2_aot: ports/scotland2/tests/aot-hooks.c $(RUNTIME) $(RUNTIME_HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -o $@ ports/scotland2/tests/aot-hooks.c $(RUNTIME) $(LDLIBS)
 
 build/t_opus: tests/t_opus.c $(RUNTIME) $(RUNTIME_HDRS)
 	@mkdir -p build
@@ -157,6 +184,10 @@ build/t_load: tests/t_load.c $(RUNTIME) $(RUNTIME_HDRS)
 # android_dlopen_ext through the guest-facing symbol table: the plain form is
 # dlopen, and every extension flag is refused with a dlerror that names it. No
 # guest library is loaded; milliseconds, in `make check`.
+build/t_futex: tests/t_futex.c $(RUNTIME) $(RUNTIME_HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -o $@ tests/t_futex.c $(RUNTIME) $(LDLIBS)
+
 build/t_dl_ext: tests/t_dl_ext.c $(RUNTIME) $(RUNTIME_HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -o $@ tests/t_dl_ext.c $(RUNTIME) $(LDLIBS)
@@ -1095,7 +1126,7 @@ tgkill: build/t_tgkill
 # Each test writes to a log and is checked BEFORE the log is filtered. Piping a
 # test straight into tail/grep would hand make the filter's exit status instead
 # of the test's, so a failing test would leave the sweep green.
-check: build/t_opus build/t_variadic build/t_load build/t_il2cpp build/m_boot build/t_haptics build/t_hevc build/t_xrspace build/t_ovrplat build/t_posebound build/t_ovrplayers build/t_trackers build/t_untested build/t_audio build/t_audiorace build/t_xrinput build/t_softinput build/t_ctr build/t_mtxtable build/t_bcast build/t_neterrno build/t_fault build/t_glcaps build/t_x18race build/t_tgkill build/klepton-ld build/t_uevk build/t_jniobj build/t_fove build/t_mtlbusy build/t_metrics build/t_dl_ext build/t_jni_io build/t_jni_url build/t_jni_firebase build/t_jni_vivox build/t_jni_memory build/t_jni_azs2 build/t_gunclub build/t_maxeye build/t_assetcfg build/t_pinch build/t_arrayviews build/t_surreal build/t_mfxpreset build/t_mfxalpha build/t_statscard build/t_maxeye_swift build/t_x18pool build/t_ue421 build/t_room
+check: build/t_futex build/t_opus build/t_variadic build/t_load build/t_il2cpp build/m_boot build/t_haptics build/t_hevc build/t_xrspace build/t_ovrplat build/t_posebound build/t_ovrplayers build/t_trackers build/t_untested build/t_audio build/t_audiorace build/t_xrinput build/t_softinput build/t_ctr build/t_mtxtable build/t_bcast build/t_neterrno build/t_fault build/t_glcaps build/t_x18race build/t_tgkill build/klepton-ld build/t_uevk build/t_jniobj build/t_fove build/t_mtlbusy build/t_metrics build/t_dl_ext build/t_jni_io build/t_jni_url build/t_jni_firebase build/t_jni_vivox build/t_jni_memory build/t_jni_azs2 build/t_gunclub build/t_maxeye build/t_assetcfg build/t_pinch build/t_arrayviews build/t_surreal build/t_mfxpreset build/t_mfxalpha build/t_statscard build/t_maxeye_swift build/t_x18pool build/t_ue421 build/t_room
 	@# The guest steps read $(TARGET)'s own files. Without them the loader steps print nothing and pass, and the
 	@# run ends at the il2cpp step with a bare "Error 1" - a check that looked green until its last line. A
 	@# working copy without the game's tree (a fresh git worktree) is told so here, before anything runs.
@@ -1156,6 +1187,7 @@ check: build/t_opus build/t_variadic build/t_load build/t_il2cpp build/m_boot bu
 	@head -1 build/mtlbusy.log && tail -1 build/mtlbusy.log
 	@./build/t_metrics > build/metrics.log 2>&1 || { cat build/metrics.log; exit 1; }
 	@head -1 build/metrics.log && tail -1 build/metrics.log
+	@./build/t_futex > build/futex.log 2>&1 || { cat build/futex.log; exit 1; }
 	@./build/t_dl_ext > build/dl-ext.log 2>&1 || { cat build/dl-ext.log; exit 1; }
 	@echo "=== android_dlopen_ext ===" && tail -1 build/dl-ext.log
 	@./build/t_jni_io > build/jni-io.log 2>&1 || { cat build/jni-io.log; exit 1; }
@@ -1396,9 +1428,12 @@ xros: $(XROS_GATES) build/Klepton.xcframework swiftcheck
 # between this and the real build, which is the one thing that would make it
 # lie.
 swiftcheck:
+	@mkdir -p build/swift-module-cache
 	@xcrun -sdk xros swiftc -typecheck -target arm64-apple-xros26.0 \
+	  -module-cache-path build/swift-module-cache \
 	  -import-objc-header visionos/Sources/Klepton-Bridging-Header.h \
-	  $(RUNTIME_INC) visionos/Sources/*.swift visionos/SteamCloudKit/Sources/SteamCloudKit/*.swift 2>&1 | grep -E '^[^ ].*error:' && exit 1; \
+	  $(RUNTIME_INC) visionos/Sources/*.swift visionos/SteamCloudKit/Sources/SteamCloudKit/*.swift \
+	  > build/swiftcheck.log 2>&1 || { cat build/swiftcheck.log; exit 1; }; \
 	  echo "  swiftcheck: the visionOS app typechecks against runtime/*.h"
 
 # The archives are real targets with real prerequisites, not side effects of a
