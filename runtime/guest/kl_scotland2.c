@@ -421,10 +421,10 @@ static int after_original_scene_call(void) {
         fprintf(stderr,"[scotland2] SONGDOWNLOADER_LATE_OK actual original callbacks, eight PlaylistCore hooks and five/four custom types; in-game browsing/download/playback still require interaction\n");
     }
     if(*remaining_profile_root){
-        const char *mods[]={"datakeeper","fakeid","unicode"};
-        const char *libs[]={"libdatakeeper.so","libFakeId.so","libunicode.so"};
-        const unsigned counts[]={4,1,4};
-        for(unsigned i=0;i<3;++i){
+        const char *mods[]={"datakeeper","unicode"};
+        const char *libs[]={"libdatakeeper.so","libunicode.so"};
+        const unsigned counts[]={4,4};
+        for(unsigned i=0;i<sizeof mods/sizeof mods[0];++i){
             char profile[4096];int n=snprintf(profile,sizeof profile,"%s/%s-hooks.txt",remaining_profile_root,mods[i]);
             kl_image *mod=kl_find_image(libs[i]);
             if(n<0 || (size_t)n>=sizeof profile || !mod || kl_get_stats(mod)->imports_missing)return stop("remaining core module missing or unresolved imports");
@@ -434,7 +434,7 @@ static int after_original_scene_call(void) {
         kl_image *unicode=kl_find_image("libunicode.so");
         int (*observe)(void)=kl_sym(unicode,"sc2_test_unicode_lifecycle");
         if(!observe||observe())return stop("Unicode platform glyph bridge failed");
-        fprintf(stderr,"[scotland2] REMAINING_CORE_LATE_OK all three original modules and nine hooks; Unicode Unity glyph observation scheduled\n");
+        fprintf(stderr,"[scotland2] REMAINING_CORE_LATE_OK both selected original modules and eight hooks; Fake ID excluded; Unicode Unity glyph observation scheduled\n");
     }
     return 0;
 }

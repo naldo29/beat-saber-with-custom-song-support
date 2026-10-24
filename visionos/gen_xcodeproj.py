@@ -194,7 +194,7 @@ if SC2:
     if os.environ.get('SC2_TEST_SET') in ('songdownloader','coremods'):
         SC2 += ['SC2_libplaylistcore','SC2_libsongdownloader']
     if os.environ.get('SC2_TEST_SET') == 'coremods':
-        SC2 += ['SC2_libdatakeeper','SC2_libFakeId','SC2_libunicode']
+        SC2 += ['SC2_libdatakeeper','SC2_libunicode']
     if KLT['name'] != 'beatsaber140' or os.environ.get('KLEPTON_BUNDLE_ID') != 'dev.klepton.beatsaber140.scotland2.test':
         raise SystemExit('Scotland2 is restricted to the existing separate test app bundle identifier.')
     for name in SC2:

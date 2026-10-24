@@ -5,8 +5,9 @@ cd "$(dirname "$0")/../.."
 BUNDLE="$PWD/build/scotland2/macosx-remaining-core/bundle"
 if [ ! -d "$BUNDLE" ];then mkdir -p "$BUNDLE";cp -R build/scotland2/macosx-bsml/bundle/. "$BUNDLE/";fi
 META="$BUNDLE/Scotland2Metadata";FRAMEWORKS="$BUNDLE/Frameworks"
-for name in datakeeper fakeid unicode;do
- case "$name" in fakeid) lib=libFakeId;; *) lib=lib$name;; esac
+rm -f "$META/test-only/libFakeId.so" "$META/early_mods/libFakeId.so" "$FRAMEWORKS/libFakeId.dylib"
+for name in datakeeper unicode;do
+ lib=lib$name
  phase=test-only;if [ "$name" = datakeeper ];then phase=early_mods;fi
  cp "build/scotland2/android-$name/$lib.so" "$META/$phase/"
  ./build/klepton-ld "build/scotland2/android-$name/$lib.so" --platform macos -o "$FRAMEWORKS/$lib.dylib" --quiet
@@ -15,7 +16,7 @@ done
 export SC2_LAPIZ_CATALOG="$PWD/build/scotland2/android-lapiz/hook-catalog.json"
 export SC2_BSML_CATALOG="$PWD/build/scotland2/android-bsml/hook-catalog.json"
 export SC2_DATAKEEPER_CATALOG="$PWD/build/scotland2/android-datakeeper/hook-catalog.json"
-export SC2_FAKEID_CATALOG="$PWD/build/scotland2/android-fakeid/hook-catalog.json"
+unset SC2_FAKEID_CATALOG
 export SC2_UNICODE_CATALOG="$PWD/build/scotland2/android-unicode/hook-catalog.json"
 export SC2_REMAINING_CORE=1 SC2_REMAINING_META="$META"
 # The diagnostic expects the actual per-mod output folders, not a synthetic ABI.

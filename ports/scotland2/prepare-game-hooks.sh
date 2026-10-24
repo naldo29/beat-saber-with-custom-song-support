@@ -36,7 +36,7 @@ assert profile['sha256']==hashlib.sha256(source.read_bytes()).hexdigest()
 p=out/(name+'.manifest.json');d=json.loads(p.read_text());d['targets']+=profile['targets']
 import os
 from collections import Counter
-mods={'lapiz':['lapiz'],'bsml':['lapiz','bsml'],'songcore':['lapiz','bsml','songcore'],'metacore':['lapiz','bsml','songcore','metacore'],'songdownloader':['lapiz','bsml','songcore','metacore','playlistcore'],'coremods':['lapiz','bsml','songcore','metacore','playlistcore','datakeeper','fakeid','unicode']}.get(os.environ.get('SC2_TEST_SET'),[])
+mods={'lapiz':['lapiz'],'bsml':['lapiz','bsml'],'songcore':['lapiz','bsml','songcore'],'metacore':['lapiz','bsml','songcore','metacore'],'songdownloader':['lapiz','bsml','songcore','metacore','playlistcore'],'coremods':['lapiz','bsml','songcore','metacore','playlistcore','datakeeper','unicode']}.get(os.environ.get('SC2_TEST_SET'),[])
 original_counts=Counter()
 for mod in mods if name=='libil2cpp' else []:
  catalog=json.loads(Path('build/scotland2/android-'+mod+'/hook-catalog.json').read_text())

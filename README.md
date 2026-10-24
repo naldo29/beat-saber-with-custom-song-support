@@ -13,11 +13,11 @@ Tested on a physical Vision Pro with Beat Saber **1.40.8_7379**:
 - Original SongCore loading and playback of downloaded custom songs.
 - Repeated downloads: SongCore loaded one, then two, then three songs in the tested session.
 - custom-types, Lapiz, BSML, Paperlog, MetaCore and PlaylistCore running together.
-- All eleven core mods installed together: PlayerDataKeeper, Unicode and Fake ID
-  startup hooks passed; Unicode texture upload and CJK/emoji cache passed.
-- PlayerDataKeeper created a backup identical to the real player save. The
-  all-eleven-mod update scanned all four downloaded custom songs, and the user
-  also confirmed playing a custom song in that update.
+- Unicode texture upload and CJK/emoji cache passed, and PlayerDataKeeper
+  created a backup identical to the real player save.
+- The current selection contains ten original core mods. Fake ID is excluded
+  because Klepton already supplies the adult age-category response. The user
+  confirmed the updated build still reaches the menu and plays a custom song.
 
 This uses the original mods. The separate earlier song-loader prototype is disabled
 (`KL_SONGS=0`) in the Scotland2 build.
@@ -44,9 +44,16 @@ replace the required modified Klepton runtime.
 - Every map format, every playlist feature, full-song completion and long sessions.
 - Restart/update persistence across all settings and scores.
 - Arbitrary third-party Quest mods. This is not a universal QMOD installer.
-- Extended gameplay with all eleven mods, full-song completion and long sessions.
-  The corrected eleven-mod update passed a user-confirmed custom-song playback
-  check; repeated downloading was confirmed on the earlier eight-mod build.
+- Extended gameplay with the current ten-mod selection, full-song completion
+  and long sessions. Menu and custom-song playback passed after removing Fake ID.
+
+## Integration scope
+
+The AVP Play desktop app is unchanged. This fork changes the Klepton runtime
+and generated game app to support signed mod loading and prepared hooks. The
+current implementation is a working developer port, not yet a minimized upstream
+integration. See [INTEGRATION-REVIEW.md](INTEGRATION-REVIEW.md) for the required
+interfaces, implementation choices and remaining cleanup.
 
 ## Source and credits
 

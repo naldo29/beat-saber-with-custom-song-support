@@ -79,16 +79,19 @@ Historical development notes under `ports/scotland2` describe earlier stages;
 the verified scope at the top of this document supersedes their pending-status
 statements. Further gameplay and persistence testing remains necessary.
 
-## Full eleven-mod composition
+## Selected ten-mod composition
 
-`SC2_TEST_SET=coremods` packages all eleven original core mods. The corrected
-update is installed in the existing test app. The user confirmed startup works;
-the physical log verifies all nine hooks from the three additional mods, actual
-Unity texture-region write/readback, original TMP CJK/emoji glyph caching, and
-SongCore loading all four downloaded custom songs. The session ended through
-normal background exit without a native crash marker. The user also confirmed
-playing a custom song in this corrected all-eleven-mod update. Repeated-download
-confirmation comes from the earlier eight-mod build.
+`SC2_TEST_SET=coremods` packages ten original core mods, excluding Fake ID.
+Klepton already supplies the adult age-category response. The original eleven-mod
+QMOD inventory and unused source port remain as historical references; Fake ID
+is absent from active packaging, framework embedding, hook preparation and tests.
+
+The selected update is installed in the existing test app. The user confirmed
+menu startup and custom-song playback after Fake ID removal. Physical checks
+cover the eight hooks from PlayerDataKeeper and Unicode, actual Unity texture
+write/readback, original TMP CJK/emoji caching, and four custom songs loaded.
+Earlier physical checks verified a real save backup byte-for-byte and repeated
+song downloading. These results do not establish long-session or all-map support.
 
 - PlayerDataKeeper0.2.5: original WriteAllText and File.Replace hooks back up
   normal and local save files, omit temporary files and restore them through
@@ -99,9 +102,6 @@ confirmation comes from the earlier eight-mod build.
   backup was copied and compared byte-for-byte against the current player save;
   both were identical. Destructive save/restore tests run only in the isolated
   host fixture; normal original startup restoration also runs on the headset.
-- FakeID0.1.9: original hook and exact AutoHooks header dependency retained.
-  A controlled original-return fixture with real IL2CPP objects tests both the
-  unknown-category update and preservation of existing adult preferences.
 - Unicode0.1.7: original TMP hooks, style keys, glyph cache and texture atlas
   retained. Android platform font drawing is adapted to Apple CoreText through
   a flat C ABI. Tests exercise real CJK and color-emoji glyphs through both
@@ -114,7 +114,7 @@ confirmation comes from the earlier eight-mod build.
 
 Run `bash ports/scotland2/test-remaining-core.sh` only in the prepared developer
 environment. Its save/restore fixture is host-only; never invoke that diagnostic
-on a user's live game data. On-device observers verify nine added hooks and
+on a user's live game data. On-device observers verify eight added hooks and
 schedule the actual Unicode/TMP glyph-cache check.
 
 The current generator still guards the existing local test bundle identifier.
