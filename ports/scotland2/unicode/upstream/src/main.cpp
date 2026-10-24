@@ -317,11 +317,13 @@ void DrawTexture(uint unicode, TMP_SpriteGlyph* glyph) {
     AndroidBitmap_unlockPixels(env, globals.bitmap);
 #endif
 
+#ifndef SC2_UNICODE_APPLE_GLYPHS
     auto tex = Texture2D::New_ctor(EMOJI_SIZE, EMOJI_SIZE, TextureFormat::RGBA32, false);
     // tex->LoadRawTextureData(flippedPixels, pixelsSizeU32 * 4);  // size in uint8_t*
     static auto method = il2cpp_utils::FindMethodUnsafe(tex, "LoadRawTextureData", 2);
     il2cpp_utils::RunMethod<void, false>(tex, method, System::IntPtr(flippedPixels), pixelsSizeU32 * 4);
     tex->Apply();
+#endif
 
     // debug: saves texure after copy
     // static bool saved2 = false;
@@ -337,11 +339,22 @@ void DrawTexture(uint unicode, TMP_SpriteGlyph* glyph) {
     int x = column * EMOJI_SIZE;
     int y = SHEET_SIZE - ((row + 1) * EMOJI_SIZE);
 
+#ifdef SC2_UNICODE_APPLE_GLYPHS
+    // CopyTexture_Region was stripped from the supplied Unity image. Update
+    // the same original atlas through the retained managed region API instead.
+    static_assert(sizeof(UnityEngine::Color32)==4);
+    auto colors=Array<UnityEngine::Color32>::NewLength(pixelsSizeU32);
+    std::memcpy(colors->begin(),flippedPixels,pixelsSizeU32*4);
+    auto *atlas=static_cast<Texture2D*>(currentEmojiAsset->spriteSheet.ptr());
+    atlas->SetPixels32(x,y,EMOJI_SIZE,EMOJI_SIZE,colors);
+    atlas->Apply(false,false);
+#else
     static auto CopyTexture_Region =
         il2cpp_utils::resolve_icall<void, UnityEngine::Texture*, int, int, int, int, int, int, UnityEngine::Texture*, int, int, int, int>(
             "UnityEngine.Graphics::CopyTexture_Region"
         );
     CopyTexture_Region(tex, 0, 0, 0, 0, tex->width, tex->height, currentEmojiAsset->spriteSheet, 0, 0, x, y);
+#endif
 
     // add a little bit of spacing
     right = std::min(right + (EMOJI_SIZE / 10), EMOJI_SIZE);
@@ -488,8 +501,25 @@ extern "C" __attribute__((visibility("default"))) void late_load() {
 #include "bsml/shared/BSML.hpp"
 #include "bsml/shared/BSML/MainThreadScheduler.hpp"
 extern "C" int sc2_test_unicode_raster();
+extern "C" __attribute__((visibility("default"))) int sc2_test_unicode_upload_api(){
+    auto *region=il2cpp_utils::FindMethodUnsafe(classof(Texture2D*),"SetPixels32",5);
+    auto *apply=il2cpp_utils::FindMethodUnsafe(classof(Texture2D*),"Apply",2);
+    auto *read=il2cpp_utils::FindMethodUnsafe(classof(Texture2D*),"GetPixels32",0);
+    if(!region||!region->methodPointer||!apply||!apply->methodPointer||!read||!read->methodPointer)return 1;
+    std::fprintf(stderr,"UNICODE_UPLOAD_API_READY retained managed SetPixels32(region), Apply and GetPixels32 methods found\n");return 0;
+}
 extern "C" __attribute__((visibility("default"))) int sc2_test_unicode_lifecycle(){
-    if(sc2_test_unicode_raster())return 1;
+    if(sc2_test_unicode_raster()||sc2_test_unicode_upload_api())return 1;
+    auto *texture=Texture2D::New_ctor(2,2,TextureFormat::RGBA32,false);
+    auto colors=Array<UnityEngine::Color32>::NewLength(1);
+    colors->_values[0].r=17;colors->_values[0].g=34;
+    colors->_values[0].b=51;colors->_values[0].a=255;
+    texture->SetPixels32(1,1,1,1,colors);texture->Apply(false,false);
+    auto readback=texture->GetPixels32();
+    auto c=readback[3];bool correct=c.r==17&&c.g==34&&c.b==51&&c.a==255;
+    UnityEngine::Object::DestroyImmediate(texture);
+    if(!correct)return 2;
+    std::fprintf(stderr,"[scotland2] UNICODE_REGION_UPLOAD_OK actual Unity managed region write, Apply and pixel readback passed\n");
     BSML::Register::RegisterMenuButton("Unicode test: 漢 😀", "Unicode rendering check", []{});
     BSML::MainThreadScheduler::ScheduleUntil([]{return added&&rootEmojiAsset;},[]{
         for(uint32_t cp:{0x6f22u,0x1f600u}){

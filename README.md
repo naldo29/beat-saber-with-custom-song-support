@@ -41,7 +41,9 @@ replace the required modified Klepton runtime.
 - Arbitrary third-party Quest mods. This is not a universal QMOD installer.
 - The original custom-song baseline has eight core mods enabled. The remaining
   Unicode, PlayerDataKeeper and Fake ID ports now build and pass host checks;
-  their all-eleven-mod device update is built/signed, but physical tests are pending.
+  their all-eleven-mod device update is installed. The headset created a verified
+  save backup. A Unicode texture-upload crash fix is installed and awaiting
+  menu, glyph and playback confirmation.
 
 ## Source and credits
 

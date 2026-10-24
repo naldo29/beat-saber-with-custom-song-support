@@ -147,6 +147,7 @@ int main(int argc, char **argv) {
             if(i){void (*late)(void)=kl_sym(mod,"late_load");assert(late);late();}
             snprintf(path,sizeof path,"%s/android-%s/hook-profile.txt",getenv("SC2_REMAINING_BUILD"),names[i]);
             verify_mod_hooks(image,path,libs[i],counts[i]);
+            if(i==2){int (*api)(void)=kl_sym(mod,"sc2_test_unicode_upload_api");assert(api&&!api());}
             int (*check)(void)=kl_sym(mod,checks[i]);assert(check);int result=check();
             fprintf(stderr,"REMAINING_CORE_HOST %s imports=%u result=%d\n",names[i],kl_get_stats(mod)->imports_bound,result);if(result)return 1;
         }

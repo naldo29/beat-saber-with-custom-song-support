@@ -35,5 +35,7 @@ elf=Elf(str(out/(soname+'.so')));assert {'setup', 'load' if name=='datakeeper' e
 assert 'A64HookFunction' in imports and not {'mmap','mprotect'}&imports
 record=json.loads((src.parent/'provenance.json').read_text());record.update(version=version,originalFunctionalityRetained=True,compilerHookCount=len(catalog['catalog']),importsAdaptedAnd64=True,files={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [out/(soname+'.so'),out/'hook-catalog.json',src.parent/'upstream.patch']},scope='Original mod source built against adapted shared hook backend; physical verification pending.')
 if name=='datakeeper':record['disabledLegacyLightingReset']=True
-if name=='unicode':record['platformGlyphRasterizer']='Apple CoreText via flat C bridge; original TMP cache/atlas retained'
+if name=='unicode':
+ record['platformGlyphRasterizer']='Apple CoreText via flat C bridge; original TMP cache/atlas retained'
+ record['platformAtlasUpload']='Retained Texture2D.SetPixels32 region API and Apply; stripped Graphics.CopyTexture_Region bypassed'
 (out/'provenance.json').write_text(json.dumps(record,indent=2)+'\n');print('Built',name,out/(soname+'.so'))
