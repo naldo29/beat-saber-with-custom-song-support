@@ -79,14 +79,16 @@ Historical development notes under `ports/scotland2` describe earlier stages;
 the verified scope at the top of this document supersedes their pending-status
 statements. Further gameplay and persistence testing remains necessary.
 
-## Remaining three core mods: physical verification in progress
+## Full eleven-mod composition
 
-`SC2_TEST_SET=coremods` packages the full eleven-mod composition. The device
-update is installed in the existing test app. The first headset run installed
-all nine added hooks and rendered CJK and color emoji, but crashed when Unicode
-called a texture-copy API stripped from this game. A corrected update uses the
-retained managed texture-region API; its menu and playback checks are pending.
-The earlier eight-mod custom-song build remains the verified playback baseline.
+`SC2_TEST_SET=coremods` packages all eleven original core mods. The corrected
+update is installed in the existing test app. The user confirmed startup works;
+the physical log verifies all nine hooks from the three additional mods, actual
+Unity texture-region write/readback, original TMP CJK/emoji glyph caching, and
+SongCore loading all four downloaded custom songs. The session ended through
+normal background exit without a native crash marker. The user also confirmed
+playing a custom song in this corrected all-eleven-mod update. Repeated-download
+confirmation comes from the earlier eight-mod build.
 
 - PlayerDataKeeper0.2.5: original WriteAllText and File.Replace hooks back up
   normal and local save files, omit temporary files and restore them through
@@ -95,7 +97,8 @@ The earlier eight-mod custom-song build remains the verified playback baseline.
   matching its JNI paths. The upstream one-time lighting reset is disabled to
   preserve existing effects preferences. No saves are moved. A real headset
   backup was copied and compared byte-for-byte against the current player save;
-  both were identical. Restore testing remains confined to the isolated fixture.
+  both were identical. Destructive save/restore tests run only in the isolated
+  host fixture; normal original startup restoration also runs on the headset.
 - FakeID0.1.9: original hook and exact AutoHooks header dependency retained.
   A controlled original-return fixture with real IL2CPP objects tests both the
   unknown-category update and preservation of existing adult preferences.
@@ -106,9 +109,8 @@ The earlier eight-mod custom-song build remains the verified playback baseline.
   checked. The Apple path uploads to the original atlas with retained
   `Texture2D.SetPixels32` and `Apply` methods, avoiding the stripped
   `Graphics.CopyTexture_Region` icall. Host checks verify those methods exist;
-  an on-device diagnostic writes and reads back a real Unity texture region,
-  then checks the original TMP glyph cache. Texture upload/cache and the menu
-  label still need physical confirmation after this fix.
+  the on-device diagnostic passed a real Unity texture-region write/readback and
+  repeat lookups through the original TMP glyph cache for CJK and color emoji.
 
 Run `bash ports/scotland2/test-remaining-core.sh` only in the prepared developer
 environment. Its save/restore fixture is host-only; never invoke that diagnostic
