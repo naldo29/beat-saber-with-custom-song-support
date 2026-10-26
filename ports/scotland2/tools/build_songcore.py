@@ -39,6 +39,9 @@ flags=['-std=c++20','-O1','-gline-tables-only','-fPIC','-frtti','-fexceptions','
     '-DVERSION="1.1.24"','-DMOD_ID="SongCore"','-DMAKE_DOCS=0',
     '-Wno-invalid-offsetof','-Wno-extra-qualification',
     '-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [arg for p in includes for arg in ['-I',str(p)]]
 sources=sorted((src/'src').rglob('*.cpp'))
 digest=hashlib.sha256(json.dumps(flags).encode())
@@ -79,7 +82,7 @@ for asset in sorted((src/'assets').rglob('*')):
     if not asset.is_file():continue
     name='_binary_'+re.sub(r'[^a-zA-Z0-9_]','_',str(asset.relative_to(src/'assets')))
     asm += ['.balign 8','.global '+name+'_start','.global '+name+'_end',name+'_start:',
-        '.space 32,32','.incbin "'+str(asset)+'"','.byte 32',name+'_end:']
+        '.space 32,32','.incbin '+json.dumps(str(asset)),'.byte 32',name+'_end:']
 (out/'assets.S').write_text('\n'.join(asm)+'\n')
 subprocess.run([str(c),'-c',str(out/'assets.S'),'-o',str(out/'assets.o')],check=True)
 lock=json.loads((ROOT/'port-results/coremods/coremods-lock.json').read_text())

@@ -28,6 +28,9 @@ flags=['-std=c++20','-O1','-gline-tables-only','-fPIC','-frtti','-fexceptions','
     '-DANDROID','-DUNITY_2021','-DHAS_CODEGEN','-DNEED_UNSAFE_CSHARP','-DFMT_HEADER_ONLY','-DSC2_AOT_HOOKS',
     '-DVERSION="0.8.8"','-DVERSION_LONG=0','-DMOD_ID="songdownloader"','-Wno-invalid-offsetof','-Wno-extra-qualification',
     '-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [arg for path in includes for arg in ['-I',str(path)]]
 adapter=ROOT/'ports/scotland2/tests/android-songdownloader-support.cpp'
 sources=sorted((src/'src').rglob('*.cpp'))+[adapter]
@@ -40,6 +43,7 @@ for name in ['bshook-sdk.patch','src/android-mod-sdk-prelude.hpp']:
 for name in ['bs-cordl-lock.json','libil2cpp-lock.json','sombrero-lock.json','lock.json','sdk-submodules-lock.json']:
     digest.update((ROOT/'port-deps/sources'/name).read_bytes())
 digest.update(adapter.read_bytes())
+digest.update((ROOT/'ports/scotland2/src/safe-zip.c').read_bytes())
 digest.update(json.dumps(curl_lock,sort_keys=True).encode())
 stamp=digest.hexdigest();state=out/'build-key.txt'
 fresh=state.exists() and state.read_text()==stamp and os.environ.get('SC2_REBUILD')!='1'
@@ -67,7 +71,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
                 if source:pending.add(pool.submit(compile_one,source))
 if failed:sys.exit(1)
 c=cc.parent/'aarch64-linux-android26-clang'
-subprocess.run([str(c),'-O2','-fPIC','-fvisibility=hidden','-I',str(zip_source),'-c',str(zip_source/'zip.c'),'-o',str(out/'zip.o')],check=True)
+subprocess.run([str(c),*reproducible_flags(ROOT,ndk),'-O2','-fPIC','-fvisibility=hidden','-I',str(zip_source),'-c',str(ROOT/'ports/scotland2/src/safe-zip.c'),'-o',str(out/'zip.o')],check=True)
 subprocess.run([str(cc),'-shared',*[str(object_path(s)) for s in sources],str(out/'zip.o'),
     str(ROOT/'port-deps/sources/libcurl-7.78.0.a'),'-lz','-llog',
     '-Lbuild/scotland2/android-aot','-lsl2_abi','-Lbuild/scotland2/android-customtypes','-lcustom-types',
@@ -80,7 +84,9 @@ state.write_text(stamp)
 sys.path.insert(0,str(ROOT/'tools'))
 from audit_elf import Elf
 elf=Elf(str(out/'libsongdownloader.so'))
-assert {'setup','late_load','sc2_test_songdownloader_request','sc2_test_songdownloader_bad_tls'}<=elf.exports
+assert {'setup','late_load'}<=elf.exports
+if os.environ.get('SC2_BUILD_MODE')!='release':
+    assert {'sc2_test_songdownloader_request','sc2_test_songdownloader_bad_tls'}<=elf.exports
 imports={x for x,v in elf.imports}
 assert 'A64HookFunction' not in imports
 # Original OpenSSL secure-heap support imports mmap/mprotect for data pages;

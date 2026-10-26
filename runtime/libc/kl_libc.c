@@ -3259,14 +3259,24 @@ static long kl_futex_impl(int32_t *uaddr, int op, uint32_t val, const struct tim
     int      base = op & ~(KL_FUTEX_PRIVATE_FLAG | KL_FUTEX_CLOCK_REALTIME);
     unsigned b    = futex_bucket(uaddr);
 
+    if (!uaddr) { errno=EFAULT; return -1; }
+    if ((uintptr_t)uaddr%4) { errno=EINVAL; return -1; }
+    if ((base==KL_FUTEX_WAKE || base==KL_FUTEX_WAKE_BITSET || base==KL_FUTEX_WAKE_OP) && (int32_t)val<0) { errno=EINVAL; return -1; }
+
     switch (base) {
     case KL_FUTEX_WAIT:
     case KL_FUTEX_WAIT_BITSET: {
         if (base==KL_FUTEX_WAIT_BITSET && !val3) { errno=EINVAL; return -1; }
         if (ts && (ts->tv_sec<0 || ts->tv_nsec<0 || ts->tv_nsec>=1000000000L)) { errno=EINVAL; return -1; }
+        // A Linux futex syscall is not a pthread cancellation point. Darwin's
+        // condvar is: keep a canceled thread from leaving a stack waiter linked
+        // into the bucket or abandoning its mutex while cancellation unwinds.
+        int cancellation;
+        pthread_setcancelstate(PTHREAD_CANCEL_DISABLE,&cancellation);
         pthread_mutex_lock(&g_futex[b].m);
         if ((uint32_t)__atomic_load_n(uaddr, __ATOMIC_SEQ_CST) != val) {
             pthread_mutex_unlock(&g_futex[b].m);
+            pthread_setcancelstate(cancellation,NULL);
             errno = EAGAIN;
             return -1;
         }
@@ -3284,17 +3294,18 @@ static long kl_futex_impl(int32_t *uaddr, int op, uint32_t val, const struct tim
             struct timespec now, abs;
             clock_gettime(CLOCK_REALTIME, &now);
             if (base == KL_FUTEX_WAIT) {
-                abs.tv_sec  = now.tv_sec  + ts->tv_sec;
+                if (__builtin_add_overflow(now.tv_sec,ts->tv_sec,&abs.tv_sec)) r=EINVAL;
                 abs.tv_nsec = now.tv_nsec + ts->tv_nsec;
             } else if (op & KL_FUTEX_CLOCK_REALTIME) {
                 abs = *ts;
             } else {
                 struct timespec mono;
                 clock_gettime(CLOCK_MONOTONIC, &mono);
-                abs.tv_sec  = now.tv_sec  + (ts->tv_sec  - mono.tv_sec);
+                if (__builtin_add_overflow(now.tv_sec,ts->tv_sec-mono.tv_sec,&abs.tv_sec)) r=EINVAL;
                 abs.tv_nsec = now.tv_nsec + (ts->tv_nsec - mono.tv_nsec);
             }
-            ts_normalise(&abs);
+            if (!r && abs.tv_sec==INT64_MAX && abs.tv_nsec>=1000000000L) r=EINVAL;
+            if (!r) ts_normalise(&abs);
             while (!waiter.notified && !r) r = pthread_cond_timedwait(&g_futex[b].c, &g_futex[b].m, &abs);
         }
         kl_futex_waiter **link=&g_futex[b].waiters;
@@ -3302,6 +3313,7 @@ static long kl_futex_impl(int32_t *uaddr, int op, uint32_t val, const struct tim
         *link=waiter.next;
         if (waiter.notified) r=0;
         pthread_mutex_unlock(&g_futex[b].m);
+        pthread_setcancelstate(cancellation,NULL);
         if (r) { errno = r; return -1; }
         return 0;
     }
@@ -3322,6 +3334,8 @@ static long kl_futex_impl(int32_t *uaddr, int op, uint32_t val, const struct tim
     // joins on a QSemaphore) while constructing its very first panel. Nothing
     // in the hang mentions futex — see the trap record.
     case KL_FUTEX_WAKE_OP: {
+        if (!uaddr2) { errno=EFAULT; return -1; }
+        if ((uintptr_t)uaddr2%4 || (int32_t)(uintptr_t)ts<0) { errno=EINVAL; return -1; }
         if (!uaddr2) { errno = EFAULT; return -1; }
         // `ts` is not a pointer for this op — the kernel reuses the timeout
         // slot as the second wake count.

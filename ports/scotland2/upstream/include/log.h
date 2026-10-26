@@ -13,8 +13,13 @@
 #include <cstdio>
 #define SL2_APPLE_LOG(lvl, str, ...) \
   fmt::print(stderr, "[scotland2:{}] " str "\n", lvl __VA_OPT__(, __VA_ARGS__))
+#if !defined(SC2_DIAGNOSTICS) || SC2_DIAGNOSTICS
 #define LOG_VERBOSE(...) SL2_APPLE_LOG("verbose", __VA_ARGS__)
 #define LOG_DEBUG(...) SL2_APPLE_LOG("debug", __VA_ARGS__)
+#else
+#define LOG_VERBOSE(...) do { if (false) SL2_APPLE_LOG("verbose", __VA_ARGS__); } while (false)
+#define LOG_DEBUG(...) do { if (false) SL2_APPLE_LOG("debug", __VA_ARGS__); } while (false)
+#endif
 #define LOG_INFO(...) SL2_APPLE_LOG("info", __VA_ARGS__)
 #define LOG_WARN(...) SL2_APPLE_LOG("warn", __VA_ARGS__)
 #define LOG_ERROR(...) SL2_APPLE_LOG("error", __VA_ARGS__)

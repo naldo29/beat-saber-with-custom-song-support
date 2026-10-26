@@ -5,12 +5,17 @@ cd "$(dirname "$0")/../.."
 NDK="${ANDROID_NDK_HOME:-$PWD/port-deps/toolchains/android-ndk-r27c}"
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/darwin-x86_64"
 CC="$TOOLCHAIN/bin/aarch64-linux-android26-clang++"
+REPRO_FLAGS=(-fdebug-compilation-dir=.)
+if [ "${SC2_BUILD_MODE:-diagnostic}" = release ]; then
+  REPRO_FLAGS=("-ffile-prefix-map=$PWD=." "-fmacro-prefix-map=$PWD=." "-ffile-prefix-map=$NDK=/ndk" -fdebug-compilation-dir=.)
+fi
+
 OUT="$PWD/build/scotland2/android-paths"
 if [ "${SC2_ANDROID_CAPSTONE:-0}" = 1 ]; then OUT="$PWD/build/scotland2/android-compat"; fi
 if [ "${SC2_ANDROID_AOT:-0}" = 1 ]; then OUT="$PWD/build/scotland2/android-aot"; fi
 mkdir -p "$OUT"
 cat > "$OUT/adapter.exports" <<'MAP'
-{ global: _ZN9modloader*; cs_*; A64HookFunction; A64HookFunctionV; sc2_bshook_mkpath; local: *; };
+{ global: _ZN9modloader*; cs_*; A64HookFunction; A64HookFunctionV; sc2_bshook_mkpath; sc2_beatsaver_extract; local: *; };
 MAP
 EXTRA=(-Wl,--version-script,"$OUT/adapter.exports")
 if [ "${SC2_ANDROID_CAPSTONE:-0}" = 1 ]; then
@@ -37,6 +42,9 @@ SOURCES=(ports/scotland2/src/android-paths.cpp)
 if [ "${SC2_ANDROID_AOT:-0}" = 1 ]; then
   SOURCES+=(ports/scotland2/and64/shared/inline-hook/And64InlineHook.cpp)
   SOURCES+=(ports/scotland2/src/android-bshook-filesystem.cpp)
+  "$TOOLCHAIN/bin/aarch64-linux-android26-clang" "${REPRO_FLAGS[@]}" -O1 -fPIC -fvisibility=hidden \
+    -Iport-deps/sources/zip-songdownloader/src -c ports/scotland2/src/safe-zip.c -o "$OUT/safe-zip.o"
+  SOURCES+=(ports/scotland2/src/android-beatsaver-extract.cpp "$OUT/safe-zip.o")
   COMMON+=(-DSC2_AOT_HOOKS)
   if [ "${SC2_ANDROID_CAPSTONE:-0}" = 1 ]; then
     SOURCES+=(ports/scotland2/src/android-capstone-view.cpp)
@@ -45,11 +53,11 @@ if [ "${SC2_ANDROID_AOT:-0}" = 1 ]; then
     COMMON+=(-I"$OUT/sdk")
   fi
 fi
-"$CC" "${COMMON[@]}" "${SOURCES[@]}" \
+"$CC" "${REPRO_FLAGS[@]}" "${COMMON[@]}" "${SOURCES[@]}" \
   "${EXTRA[@]}" \
   -Wl,-soname,libsl2_abi.so -o "$OUT/libsl2_abi.so"
 # The consumer's seven C++ calls must stay as imports to the other guest DSO.
-"$CC" "${COMMON[@]}" ports/scotland2/tests/android-path-consumer.cpp \
+"$CC" "${REPRO_FLAGS[@]}" "${COMMON[@]}" ports/scotland2/tests/android-path-consumer.cpp \
   -Wl,--exclude-libs,ALL \
   -L"$OUT" -Wl,--no-as-needed -lsl2_abi -Wl,-soname,libsc2_abi_consumer.so \
   -o "$OUT/libsc2_abi_consumer.so"
@@ -67,7 +75,7 @@ expected={'_ZN9modloader13get_files_dirEv','_ZN9modloader16get_external_dirEv',
  '_ZN9modloader18get_modloader_pathEv','_ZN9modloader25get_modloader_source_pathEv',
  '_ZN9modloader28get_modloader_root_load_pathEv'}
 path_expected=set(expected)
-if sys.argv[3]=='1': expected|={'A64HookFunction','A64HookFunctionV','sc2_bshook_mkpath'}
+if sys.argv[3]=='1': expected|={'A64HookFunction','A64HookFunctionV','sc2_bshook_mkpath','sc2_beatsaver_extract'}
 if sys.argv[2]=='1':
  assert expected < adapter.exports and all(e.startswith('cs_') for e in adapter.exports-expected)
 else:

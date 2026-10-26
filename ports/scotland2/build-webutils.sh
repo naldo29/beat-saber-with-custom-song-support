@@ -4,6 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 NDK="${ANDROID_NDK_HOME:-$PWD/port-deps/toolchains/android-ndk-r27c}"
 CC="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++"
+REPRO_FLAGS=(-fdebug-compilation-dir=.)
+if [ "${SC2_BUILD_MODE:-diagnostic}" = release ]; then
+  REPRO_FLAGS=("-ffile-prefix-map=$PWD=." "-fmacro-prefix-map=$PWD=." "-ffile-prefix-map=$NDK=/ndk" -fdebug-compilation-dir=.)
+fi
+
 OUT="$PWD/build/scotland2/android-webutils"
 mkdir -p "$OUT"
 python3 - <<'PY'
@@ -16,7 +21,7 @@ link=Path('build/scotland2/mod-sdk/libcurl');target=(root/'libcurl-8.5.0').resol
 if not link.exists():link.symlink_to(target,target_is_directory=True)
 assert link.resolve()==target
 PY
-"$CC" -std=c++20 -O1 -gline-tables-only -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -shared -fdeclspec \
+"$CC" "${REPRO_FLAGS[@]}" -std=c++20 -O1 -gline-tables-only -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -shared -fdeclspec \
  -DWEBUTILS_NO_JSON -DWEBUTILS_NO_BSML -DFMT_HEADER_ONLY -DMOD_ID='"WebUtils"' -DVERSION='"0.6.8"' \
  -Iports/scotland2/web-utils/upstream/shared -Iports/scotland2/web-utils/upstream/include \
  -Ibuild/scotland2/mod-sdk -Iport-deps/sources/fmt/include \

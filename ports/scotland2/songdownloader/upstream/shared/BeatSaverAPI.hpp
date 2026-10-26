@@ -117,5 +117,7 @@ namespace BeatSaver::API {
 
     SONGDOWNLOADER_EXPORT void DownloadMissingSongsFromPlaylist(PlaylistCore::Playlist* playlist, std::function<void()> finished, std::function<void(int, int)> progressUpdate = nullptr);
 
+    // Legacy ABI; internal callers use the synchronized snapshot below.
     SONGDOWNLOADER_EXPORT extern std::string exception;
+    SONGDOWNLOADER_EXPORT std::string GetException();
 }

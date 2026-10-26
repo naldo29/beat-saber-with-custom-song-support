@@ -6,15 +6,23 @@
 #include "libcurl/shared/easy.h"
 #include <sstream>
 #include <cstdlib>
+#include <limits>
+#include <algorithm>
+#include <cmath>
 
 #define TIMEOUT 10
 #define USER_AGENT "QuestSongDownloader/" VERSION " (+https://github.com/darknight1050/SongDownloader)"
 
 namespace WebUtils {
+    [[maybe_unused]] static const auto curlInitialized=curl_global_init(CURL_GLOBAL_ALL);
     // Standalone platform trust asset; retain the original curl request code.
     static void ConfigureTLS(CURL* curl) {
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         if (const char* ca=std::getenv("KL_SCOTLAND2_CA_BUNDLE"); ca && *ca)
             curl_easy_setopt(curl, CURLOPT_CAINFO, ca);
     }
@@ -38,7 +46,7 @@ namespace WebUtils {
             {
                 ret << ch;
             }
-            else if ((ch == '%') && IS_HEXDIG(s[i+0]) && IS_HEXDIG(s[i+1]))
+            else if ((ch == '%') && i + 1 < s.size() && IS_HEXDIG(s[i+0]) && IS_HEXDIG(s[i+1]))
             {
                 ret << s.substr(i-1, 3);
                 i += 2;
@@ -90,10 +98,13 @@ namespace WebUtils {
 
     std::size_t CurlWrite_CallbackFunc_StdString(void *contents, std::size_t size, std::size_t nmemb, std::string *s)
     {
+        constexpr std::size_t limit=512ULL*1024*1024;
+        if (!s || (size && nmemb>limit/size)) return 0;
         std::size_t newLength = size * nmemb;
+        if (s->size()>limit || newLength>limit-s->size()) return 0;
         try {
             s->append((char*)contents, newLength);
-        } catch(std::bad_alloc &e) {
+        } catch(const std::exception &e) {
             //handle memory problem
             LOG_CRITICAL("Failed to allocate string of size: {}", newLength);
             return 0;
@@ -116,8 +127,10 @@ namespace WebUtils {
     }
 
     long Get(std::string url, long timeout, std::string& val) {
+        val.clear();
         // Init curl
         auto* curl = curl_easy_init();
+        if (!curl) return 0;
         struct curl_slist *headers = NULL;
         headers = curl_slist_append(headers, "Accept: */*");
         // Set headers
@@ -140,15 +153,17 @@ namespace WebUtils {
         curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
         ConfigureTLS(curl);
 
-        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
 
         auto res = curl_easy_perform(curl);
         /* Check for errors */
         if (res != CURLE_OK) {
             LOG_CRITICAL("curl_easy_perform() failed: {}: {}", int(res), curl_easy_strerror(res));
         }
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        if (res == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+        else val.clear();
         curl_easy_cleanup(curl);
+        curl_slist_free_all(headers);
 
         return httpCode;
     }
@@ -167,6 +182,7 @@ namespace WebUtils {
                 std::string val;
                 // Init curl
                 auto* curl = curl_easy_init();
+                if (!curl) { if(finished) finished(0,{}); return; }
                 struct curl_slist *headers = NULL;
                 headers = curl_slist_append(headers, "Accept: */*");
                 // Set headers
@@ -191,10 +207,10 @@ namespace WebUtils {
                     // Install the callback function
                     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
                         +[] (void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
-                            float percentage = (float)dlnow / (float)dltotal * 100.0f;
+                            float percentage = dltotal>0 ? std::clamp((float)dlnow / (float)dltotal * 100.0f,0.0f,100.0f) : 0.0f;
                             if(isnan(percentage))
                                 percentage = 0.0f;
-                            reinterpret_cast<ProgressUpdateWrapper*>(clientp)->progressUpdate(percentage);
+                            try { reinterpret_cast<ProgressUpdateWrapper*>(clientp)->progressUpdate(percentage); } catch (...) { return 1; }
                             return 0;
                         }
                     );
@@ -205,17 +221,19 @@ namespace WebUtils {
                 curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
                 ConfigureTLS(curl);
 
-                curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+                curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
 
                 auto res = curl_easy_perform(curl);
                 /* Check for errors */
                 if (res != CURLE_OK) {
                     LOG_CRITICAL("curl_easy_perform() failed: {}: {}", int(res), curl_easy_strerror(res));
                 }
-                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+                if (res == CURLE_OK) curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+                else val.clear();
                 curl_easy_cleanup(curl);
+                curl_slist_free_all(headers);
                 delete wrapper;
-                finished(httpCode, val);
+                if(finished) finished(httpCode, val);
             }
         );
         t.detach();

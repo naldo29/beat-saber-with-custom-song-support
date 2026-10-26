@@ -205,4 +205,6 @@
    return Result<std::span<uint32_t const>, std::monostate>::Err();
  }
  
--}  // namespace flamingo+}  // namespace flamingo
+-}  // namespace flamingo
+\ No newline at end of file
++}  // namespace flamingo

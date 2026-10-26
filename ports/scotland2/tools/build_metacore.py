@@ -21,6 +21,9 @@ flags=['-std=c++20','-O1','-gline-tables-only','-fPIC','-frtti','-fexceptions','
     '-DANDROID','-DUNITY_2021','-DHAS_CODEGEN','-DNEED_UNSAFE_CSHARP','-DFMT_HEADER_ONLY','-DSC2_AOT_HOOKS',
     '-DWEBUTILS_NO_BSML','-DVERSION="1.6.2"','-DVERSION_LONG=0','-DMOD_ID="metacore"','-Wno-invalid-offsetof','-Wno-extra-qualification',
     '-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [arg for path in includes for arg in ['-I',str(path)]]
 unity_profile_path=ROOT/'ports/scotland2/metacore/unity-target-profile.json'
 unity_profile=json.loads(unity_profile_path.read_text())
@@ -66,7 +69,7 @@ if failed:sys.exit(1)
 link=[str(cc),'-shared',*[str(object_path(s)) for s in sources],
     '-Lbuild/scotland2/android-aot','-lsl2_abi','-Lbuild/scotland2/android-customtypes','-lcustom-types',
     '-Lbuild/scotland2/android-customtypes/deps','-lbeatsaber-hook','-lpaper2_scotland2','-Lbuild/scotland2/android-webutils','-lweb-utils',
-    '-Lport-results/coremods/elf/song-details/1.0.4','-lsongdetails','-llog',
+    '-L'+str(ROOT/'build/scotland2/android-song-details' if (ROOT/'build/scotland2/android-song-details/libsongdetails.so').is_file() else ROOT/'port-results/coremods/elf/song-details/1.0.4'),'-lsongdetails','-llog',
     '-Wl,-z,max-page-size=16384','-Wl,--exclude-libs,ALL','-Wl,-soname,libmetacore.so','-o',str(out/'libmetacore.so')]
 subprocess.run(link,check=True)
 debug=out/'libmetacore.debug.so';(out/'libmetacore.so').replace(debug)

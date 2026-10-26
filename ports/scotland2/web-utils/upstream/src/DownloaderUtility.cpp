@@ -9,14 +9,22 @@
 #include <fstream>
 #include <cstdlib>
 #include <cctype>
+#include <limits>
+#include <algorithm>
+#include <cmath>
 
 namespace WebUtils {
+    [[maybe_unused]] static const auto curlInitialized=curl_global_init(CURL_GLOBAL_ALL);
     // The Android curl build has no Apple trust-store default. Configure its
     // original TLS implementation with the test app's explicit CA bundle.
     static void ConfigureTLS(CURL* curl, const URLOptions& options) {
         std::string scheme(options.protocol());
         std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return std::tolower(c); });
-        const bool verify = options.useSSL || scheme == "https";
+        const bool verify = true;
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verify ? 1L : 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, verify ? 2L : 0L);
         if (verify) {
@@ -58,6 +66,7 @@ namespace WebUtils {
 
     std::string URLOptions::fullURl() const {
         auto protocol = this->protocol();
+        if (protocol.empty() || url.size() < protocol.size()+3) return {};
         auto afterProtocol = url.substr(protocol.size() + 3);
         if (!noEscape) afterProtocol = escape(afterProtocol);
         if (queries.empty()) return fmt::format("{}://{}", protocol, afterProtocol);
@@ -79,14 +88,18 @@ namespace WebUtils {
     }
 
     static std::size_t write_vec_cb(uint8_t* content, std::size_t size, std::size_t nmemb, std::vector<uint8_t>* vec) {
+        constexpr size_t limit=512ULL*1024*1024;
+        if ((size && nmemb>limit/size) || vec->size()>limit || size*nmemb>limit-vec->size())return 0;
         std::span<uint8_t> addedData(content, (size * nmemb));
-        vec->insert(std::next(vec->begin(), vec->size()), addedData.begin(), addedData.end());
+        try { vec->insert(std::next(vec->begin(), vec->size()), addedData.begin(), addedData.end()); } catch (...) { return 0; }
         return addedData.size();
     };
 
     static std::size_t write_str_cb(char* content, std::size_t size, std::size_t nmemb, std::string* str) {
+        constexpr size_t limit=1024*1024;
+        if ((size && nmemb>limit/size) || str->size()>limit || size*nmemb>limit-str->size())return 0;
         std::string_view addedText(content, (size * nmemb));
-        str->append(addedText);
+        try { str->append(addedText); } catch (...) { return 0; }
         return addedText.size();
     };
 
@@ -99,9 +112,13 @@ namespace WebUtils {
             std::filesystem::path filePath(urlOptions.url.substr(7));
             if (std::filesystem::exists(filePath) && filePath.has_filename()) {
                 std::ifstream file(filePath, std::ios::ate | std::ios::binary | std::ios::in);
-                std::vector<uint8_t> data(file.tellg());
+                auto length=file.tellg();
+                if (length<0 || length>512LL*1024*1024)return false;
+                std::vector<uint8_t> data(static_cast<size_t>(length));
                 file.seekg(0, std::ios::beg);
                 file.read((char*)data.data(), data.size());
+                if (!file)return false;
+                response->HttpCode=200;
                 response->AcceptData(data);
                 return response->IsSuccessful() && response->DataParsedSuccessful();
             } else {
@@ -111,6 +128,7 @@ namespace WebUtils {
         }
 
         auto curl = curl_easy_init();
+        if (!curl) return false;
         struct curl_slist* curl_headers = nullptr;
         for (const auto& [key, value] : urlOptions.headers) {
             curl_headers = curl_slist_append(curl_headers, fmt::format("{}: {}", key, value).c_str());
@@ -131,9 +149,8 @@ namespace WebUtils {
             curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, +[](std::function<void(float)>* progressReport, curl_off_t dltotal, curl_off_t dlnow, curl_off_t utotal, curl_off_t unow){
                 auto& func = *progressReport;
                 // progress for get is the download values
-                float progress = (float)dlnow / (float)dltotal;
-                if (std::isnan(progress)) progress = 0.0f;
-                func(progress);
+                float progress = dltotal > 0 ? std::clamp((float)dlnow / (float)dltotal,0.0f,1.0f) : 0.0f;
+                try { func(progress); } catch (...) { return 1; }
                 return 0;
             });
         }
@@ -152,7 +169,7 @@ namespace WebUtils {
 
         response->CurlStatus = curl_easy_perform(curl);
 
-        int httpCode = 0;
+        long httpCode = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
         response->HttpCode = httpCode;
 
@@ -164,6 +181,7 @@ namespace WebUtils {
         }
 
         curl_easy_cleanup(curl);
+        curl_slist_free_all(curl_headers);
         return response->IsSuccessful() && response->DataParsedSuccessful();
     }
 
@@ -197,6 +215,7 @@ namespace WebUtils {
         }
 
         auto curl = curl_easy_init();
+        if (!curl) return false;
         struct curl_slist* curl_headers = nullptr;
         for (const auto& [key, value] : urlOptions.headers) {
             curl_headers = curl_slist_append(curl_headers, fmt::format("{}: {}", key, value).c_str());
@@ -220,9 +239,8 @@ namespace WebUtils {
             curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, +[](std::function<void(float)>* progressReport, curl_off_t dltotal, curl_off_t dlnow, curl_off_t utotal, curl_off_t unow){
                 auto& func = *progressReport;
                 // progress for post is the upload values
-                float progress = (float)unow/ (float)utotal;
-                if (std::isnan(progress)) progress = 0.0f;
-                func(progress);
+                float progress = utotal > 0 ? std::clamp((float)unow / (float)utotal,0.0f,1.0f) : 0.0f;
+                try { func(progress); } catch (...) { return 1; }
                 return 0;
             });
         }
@@ -241,7 +259,7 @@ namespace WebUtils {
 
         int curlStatus = curl_easy_perform(curl);
 
-        int httpCode = 0;
+        long httpCode = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
 
         VERBOSE("Post result: curl {}, http {}", curlStatus, httpCode);
@@ -255,10 +273,12 @@ namespace WebUtils {
             }
 
             curl_easy_cleanup(curl);
+        curl_slist_free_all(curl_headers);
             return response->IsSuccessful() && response->DataParsedSuccessful();
         }
 
         curl_easy_cleanup(curl);
+        curl_slist_free_all(curl_headers);
         return curlStatus == CURLE_OK;
     }
 }

@@ -28,7 +28,7 @@ int kl_untested_profile(void);   // guest/kl_driver.c
 #include "kl_x18.h"
 #include "kl_guestpatch.h"
 #include "kl_aot_hooks.h"
-#include "kl_scotland2.h"
+#include "kl_extension.h"
 
 
 // ---------- ELF64 subset ----------
@@ -536,7 +536,7 @@ static uint64_t sym_value(kl_image *img, uint32_t idx, const char **name_out) {
         // scoped to module opens and default-visible weak/unique OBJECTs;
         // protected/hidden storage and source-adapted function bodies stay local.
         unsigned binding=s->st_info>>4,type=s->st_info&15,visibility=s->st_other&3;
-        if (kl_scotland2_strict_load() && type==1 && visibility==0 && (binding==2 || binding==10)) {
+        if (kl_extension_strict_load() && type==1 && visibility==0 && (binding==2 || binding==10)) {
             void *shared=kl_guest_sym_global(nm);
             if(shared)return (uint64_t)(uintptr_t)shared;
         }

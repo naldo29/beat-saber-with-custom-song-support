@@ -1,6 +1,10 @@
 #!/bin/bash
 # Prepare loader frameworks and an explicitly selected dependency set. Never installs.
 set -euo pipefail
+if [ "${SC2_BUILD_MODE:-diagnostic}" = release ]; then
+  echo 'This progressive helper is diagnostic only. Use ports/scotland2/tools/build_release.py for the selected release.' >&2
+  exit 2
+fi
 cd "$(dirname "$0")/../.."
 PLATFORM="${1:-macosx}"
 TEST_SET="${SC2_TEST_SET:-tinyxml2}"

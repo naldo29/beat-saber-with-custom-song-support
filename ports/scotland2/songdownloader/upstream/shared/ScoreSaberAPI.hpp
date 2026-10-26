@@ -194,5 +194,7 @@ namespace ScoreSaber::API {
     /// <summary>
     /// String containing any exceptions that were encountered during the request, empty otherwise
     /// </summary>
+    // Legacy ABI; internal callers use the synchronized snapshot below.
     SONGDOWNLOADER_EXPORT extern std::string exception;
+    SONGDOWNLOADER_EXPORT std::string GetException();
 }

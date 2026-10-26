@@ -25,11 +25,12 @@ namespace SongDetailsCache {
 
     std::optional<std::ifstream> DataGetter::ReadCachedDatabase() {
         if (!std::filesystem::exists(cachePath())) return std::nullopt;
+        if(std::filesystem::file_size(cachePath())>512ULL*1024*1024)return std::nullopt;
         return std::ifstream(cachePath(), std::ios::binary);
     }
 
     std::future<std::optional<DataGetter::DownloadedDatabase>> DataGetter::UpdateAndReadDatabase(std::string_view dataSourceName) {
-        return std::async(std::launch::async, std::bind(&DataGetter::UpdateAndReadDatabase_internal, dataSourceName));
+        return std::async(std::launch::async, [name=std::string(dataSourceName)]{ return DataGetter::UpdateAndReadDatabase_internal(name); });
     }
 
     std::future<void> DataGetter::WriteCachedDatabase(DownloadedDatabase& db) {
@@ -53,7 +54,8 @@ namespace SongDetailsCache {
         if (size == 0) return false;
 
         // Create decoder state
-        BrotliDecoderState* state = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
+        auto owner=std::unique_ptr<BrotliDecoderState,decltype(&BrotliDecoderDestroyInstance)>(BrotliDecoderCreateInstance(nullptr,nullptr,nullptr),BrotliDecoderDestroyInstance);
+        auto *state=owner.get();
         if (!state)
             return false; // Could not create decoder state
 
@@ -78,6 +80,7 @@ namespace SongDetailsCache {
 
             // Reserve more space if we run out
             if (available_out < chunk_size) {
+                if(old_size>=512ULL*1024*1024){out.clear();return false;}
                 out.resize(old_size + chunk_size);
                 available_out = (old_size + chunk_size) - total_out;
                 next_out = &out[total_out];
@@ -96,7 +99,7 @@ namespace SongDetailsCache {
             if (result == BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT) {
                 // The decoder wants more input, but we have no more data left in `available_in`
                 if (available_in == 0) {
-                    BrotliDecoderDestroyInstance(state);
+                    
                     out.clear();
                     return false; // Incomplete data
                 }
@@ -115,12 +118,12 @@ namespace SongDetailsCache {
             }
             else {
                 // Some error occurred
-                BrotliDecoderDestroyInstance(state);
+                
                 out.clear();
                 return false;
             }
         }
-        BrotliDecoderDestroyInstance(state);
+        
         return true;
     }
 
@@ -169,7 +172,9 @@ namespace SongDetailsCache {
         while (std::getline(buf, line)) {
             if (line.starts_with("ETag: ")) {
                 auto tagStart = line.find_first_of('"');
-                auto tagLength = (line.find_last_of('"') + 1) - tagStart;
+                auto lastQuote=line.find_last_of('"');
+                if(tagStart==std::string::npos || lastQuote<=tagStart)continue;
+                auto tagLength = lastQuote + 1 - tagStart;
                 downloadedDatabase.etag = line.substr(tagStart, tagLength);
                 break;
             }

@@ -14,7 +14,7 @@ typedef struct {
   int (*owns)(void *handle, const void *symbol, const char *guest_path);
 } sc2_platform_api;
 
-// Once per process. Metadata roots must be a separate test directory.
+// Once per process. Metadata roots contain the selected signed composition.
 int sc2_apple_configure(const sc2_platform_api *api, const char *root,
                         const char *application_id, void *java_vm);
 // Explicit lifecycle entry points. No runtime code patching or automatic hooks.

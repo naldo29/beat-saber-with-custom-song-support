@@ -300,15 +300,17 @@ def main():
     parser.add_argument('--manifest',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     args = parser.parse_args()
-    if args.input.resolve() == args.output.resolve():
-        parser.error('use a distinct output path before signing')
+    report_path=args.output.with_suffix('.hooks.json')
+    inputs={args.input.resolve(),args.elf.resolve(),args.manifest.resolve()}
+    if any(path.is_symlink() or path.resolve() in inputs for path in (args.output,report_path)):
+        parser.error('output and report must be distinct from every input and must not be symbolic links')
     try:
         result, report = prepare(args.elf.read_bytes(),args.input.read_bytes(),json.loads(args.manifest.read_text()))
     except (ValueError,KeyError,struct.error,StopIteration) as error:
         parser.error(str(error))
     args.output.write_bytes(result)
     args.output.chmod(0o755)
-    args.output.with_suffix('.hooks.json').write_text(json.dumps(report,indent=2)+'\n')
+    report_path.write_text(json.dumps(report,indent=2)+'\n')
     print(f'Prepared {len(report["targets"])} signed hook entries: {args.output}')
 
 

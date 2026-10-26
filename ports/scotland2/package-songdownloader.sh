@@ -1,6 +1,10 @@
 #!/bin/bash
 # Original in-game SongDownloader, with its real ported dependency stack.
 set -euo pipefail
+if [ "${SC2_BUILD_MODE:-diagnostic}" = release ]; then
+  echo 'This progressive helper is diagnostic only. Use ports/scotland2/tools/build_release.py for the selected release.' >&2
+  exit 2
+fi
 cd "$(dirname "$0")/../.."
 PLATFORM="${1:-xros}"
 SC2_TEST_SET=metacore bash ports/scotland2/package.sh "$PLATFORM"

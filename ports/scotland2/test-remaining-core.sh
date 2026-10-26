@@ -3,7 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 BUNDLE="$PWD/build/scotland2/macosx-remaining-core/bundle"
-if [ ! -d "$BUNDLE" ];then mkdir -p "$BUNDLE";cp -R build/scotland2/macosx-bsml/bundle/. "$BUNDLE/";fi
+python3 - "$BUNDLE" <<'PYCLEAN'
+import pathlib,shutil,sys
+root=pathlib.Path('build/scotland2').resolve();target=pathlib.Path(sys.argv[1])
+if target.is_symlink() or not target.resolve().is_relative_to(root):raise ValueError('test output aliases an external path')
+if target.exists():shutil.rmtree(target)
+shutil.copytree(root/'macosx-bsml/bundle',target)
+PYCLEAN
 META="$BUNDLE/Scotland2Metadata";FRAMEWORKS="$BUNDLE/Frameworks"
 rm -f "$META/test-only/libFakeId.so" "$META/early_mods/libFakeId.so" "$FRAMEWORKS/libFakeId.dylib"
 for name in datakeeper unicode;do

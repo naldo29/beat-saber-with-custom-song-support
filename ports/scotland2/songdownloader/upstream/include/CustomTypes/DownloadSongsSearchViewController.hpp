@@ -25,6 +25,7 @@
 #include "bsml/shared/BSML/MainThreadScheduler.hpp"
 
 #include <vector>
+#include <atomic>
 
 #define MAX_SPRITES 150
 
@@ -94,7 +95,7 @@ public:
     void GoToSong(SongDownloader::SearchEntry entry);
     void EnterSolo(GlobalNamespace::BeatmapLevel* level);
 
-    static int searchIndex;
+    static std::atomic_int searchIndex;
 
     static int searchPage;
 

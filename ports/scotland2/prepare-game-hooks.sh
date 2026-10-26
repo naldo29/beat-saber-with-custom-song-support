@@ -37,6 +37,10 @@ p=out/(name+'.manifest.json');d=json.loads(p.read_text());d['targets']+=profile[
 import os
 from collections import Counter
 mods={'lapiz':['lapiz'],'bsml':['lapiz','bsml'],'songcore':['lapiz','bsml','songcore'],'metacore':['lapiz','bsml','songcore','metacore'],'songdownloader':['lapiz','bsml','songcore','metacore','playlistcore'],'coremods':['lapiz','bsml','songcore','metacore','playlistcore','datakeeper','unicode']}.get(os.environ.get('SC2_TEST_SET'),[])
+if os.environ.get('SC2_TEST_SET')=='coremods':
+ mods=json.loads(Path('ports/scotland2/selected-mods.json').read_text())['hookCatalogs']
+if os.environ.get('SC2_BUILD_MODE')=='release' and name=='libil2cpp':
+ d['targets']=[t for t in d['targets'] if t.get('name')!='il2cpp_domain_get']
 original_counts=Counter()
 for mod in mods if name=='libil2cpp' else []:
  catalog=json.loads(Path('build/scotland2/android-'+mod+'/hook-catalog.json').read_text())

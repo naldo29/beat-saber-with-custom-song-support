@@ -718,7 +718,10 @@ enum KleptonTestSwitches {
 
     /// KL_TEST_SWITCHES=0 on the launch line hides the group and ignores what
     /// it stored, for a run that must not depend on a leftover choice.
-    static var available: Bool { klEnvOn("KL_TEST_SWITCHES", default: true) }
+    static var available: Bool {
+        guard Bundle.main.object(forInfoDictionaryKey: "KLAllowTestSwitches") as? String != "0" else { return false }
+        return klEnvOn("KL_TEST_SWITCHES", default: true)
+    }
 
     static var entries: [Entry] {
         [

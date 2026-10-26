@@ -47,7 +47,7 @@
      int instanceId = *(int*) (object + 8);
      auto destroy = ObjectSignal::onDestroys.find(instanceId);
      if (destroy != ObjectSignal::onDestroys.end() && destroy->second) {
-+#ifdef SC2_METACORE_DELETE_OFFSET
++#if defined(SC2_METACORE_DELETE_OFFSET) && SC2_DIAGNOSTICS
 +        logger.info("Native object destruction callback instanceId={}", instanceId);
 +#endif
          destroy->second();

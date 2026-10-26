@@ -115,3 +115,15 @@ visionos/Assets.xcassets/StartHero-*.imageset/
 *.mobileprovision
 *.p12
 __pycache__/
+
+# Explicit local input links and builder-generated outputs
+/beatsaber140
+/vendor
+/vendor-moltenvk
+/build-input-receipt.json
+/.scotland2-avp-local.json
+
+# This nested public dependency pin is part of clean-source builds.
+!/port-deps/sources/capstone-qpm/
+/port-deps/sources/capstone-qpm/*
+!/port-deps/sources/capstone-qpm/lock.json

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>KLScotland2Diagnostics</key>
+    <string>$(KL_SCOTLAND2_DIAGNOSTICS)</string>
+    <key>KLAllowTestSwitches</key>
+    <string>$(KL_ALLOW_TEST_SWITCHES)</string>
     <key>KLScotland2Test</key>
     <string>$(KL_SCOTLAND2_TEST)</string>
     <key>KLScotland2MetaCore</key>

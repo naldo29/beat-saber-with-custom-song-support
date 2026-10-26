@@ -6,7 +6,7 @@
 //                          kl_dl.c) and AAPCS64 variadic thunks (kl_va_thunks.S)
 //   3. local statics    — small bionic-isms defined right here
 #include <stdio.h>
-#include "kl_unicode.h"
+#include "kl_extension.h"
 #include <stdlib.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -2442,7 +2442,6 @@ static const kl_entry g_shim[] = {
 
     // Released ZIP support also needs zlib's C error-string function.
     E("zError", zError),
-    E("sc2_unicode_draw_glyph", kl_unicode_draw_glyph),
 
     // stdio needing guest-FILE translation
     E("__sF", g_sF),
@@ -2824,14 +2823,9 @@ void kl_shim_set_guest_gl(kl_image *img) { g_guest_gl = img; }
 
 void *kl_shim_lookup(const char *name) {
     if (kl_shim_override) { void *o = kl_shim_override(name); if (o) return o; }
-    // An explicitly registered signed abort dispatcher must serve both ELF
-    // imports and libc.so dlsym, before the ordinary Darwin abort binding.
-    // The Scotland2 bridge returns NULL unless native gates were enabled.
-    if (!strcmp(name, "abort")) {
-        extern void *kl_scotland2_sym(const char *);
-        void *gate = kl_scotland2_sym(name);
-        if (gate) return gate;
-    }
+    // The optional extension owns its small, explicit guest export surface.
+    void *extension = kl_extension_symbol(name);
+    if (extension) return extension;
     for (size_t i = 0; i < sizeof g_shim / sizeof g_shim[0]; i++)
         if (strcmp(g_shim[i].name, name) == 0) return g_shim[i].fn;
     // Tier 4: the NDK surface lives in its own table — it is a different

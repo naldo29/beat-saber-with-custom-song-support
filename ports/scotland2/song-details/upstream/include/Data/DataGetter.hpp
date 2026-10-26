@@ -24,6 +24,9 @@ namespace SongDetailsCache {
             static std::optional<std::ifstream> ReadCachedDatabase();
             static bool HasCachedData(int maximumAgeHours = 12);
         private:
+#if SC2_DIAGNOSTICS
+            friend struct Sc2BoundaryTests;
+#endif
             static std::filesystem::path basePath;
             friend class SongDetails;
             static void WriteCachedDatabase_internal(DownloadedDatabase& db);

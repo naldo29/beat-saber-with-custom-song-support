@@ -75,48 +75,42 @@
  MAKE_HOOK_MATCH(
      LevelCollectionNavigationController_DidActivate,
      &LevelCollectionNavigationController::DidActivate,
-@@ -290,18 +308,7 @@
-     getConfig().Init(modInfo);
- }
+@@ -288,8 +306,23 @@
+         mkpath(coversPath);
  
--extern "C" void late_load() {
--    LOG_INFO("Starting PlaylistCore installation...");
--    il2cpp_functions::Init();
--    custom_types::Register::AutoRegister();
--
--    BSML::Init();
--    BSML::Register::RegisterMenuButton("Reload Playlists", "Reloads all playlists!", [] { SongCore::API::Loading::RefreshLevelPacks(); });
--    BSML::Register::RegisterSettingsMenu<SettingsViewController*>("Playlist Core");
--
--    auto managerCInfo = managerModInfo.to_c();
--    hasManager = modloader_require_mod(&managerCInfo, CMatchType::MatchType_IdOnly);
--
-+static void InstallPlaylistHooks() {
-     INSTALL_HOOK_ORIG(logger, LevelCollectionViewController_SetData);
-     INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnPointerEnter);
-     INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnPointerExit);
-@@ -310,6 +317,25 @@
-     INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionCell_RefreshAvailabilityAsync);
-     INSTALL_HOOK(logger, MenuTransitionsHelper_RestartGame);
-     INSTALL_HOOK_ORIG(logger, LevelCollectionNavigationController_DidActivate);
+     getConfig().Init(modInfo);
 +}
 +
-+#ifdef SC2_AOT_HOOKS
++static void InstallPlaylistHooks() {
++    INSTALL_HOOK_ORIG(logger, LevelCollectionViewController_SetData);
++    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnPointerEnter);
++    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnPointerExit);
++    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnEnable);
++    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridViewAnimator_AnimateOpen);
++    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionCell_RefreshAvailabilityAsync);
++    INSTALL_HOOK(logger, MenuTransitionsHelper_RestartGame);
++    INSTALL_HOOK_ORIG(logger, LevelCollectionNavigationController_DidActivate);
+ }
+ 
++#if defined(SC2_AOT_HOOKS) && SC2_DIAGNOSTICS
 +extern "C" void sc2_test_playlistcore_install_hooks() { InstallPlaylistHooks(); }
 +#endif
 +
-+extern "C" void late_load() {
-+    LOG_INFO("Starting PlaylistCore installation...");
-+    il2cpp_functions::Init();
-+    custom_types::Register::AutoRegister();
-+
-+    BSML::Init();
-+    BSML::Register::RegisterMenuButton("Reload Playlists", "Reloads all playlists!", [] { SongCore::API::Loading::RefreshLevelPacks(); });
-+    BSML::Register::RegisterSettingsMenu<SettingsViewController*>("Playlist Core");
-+
-+    auto managerCInfo = managerModInfo.to_c();
-+    hasManager = modloader_require_mod(&managerCInfo, CMatchType::MatchType_IdOnly);
-+
+ extern "C" void late_load() {
+     LOG_INFO("Starting PlaylistCore installation...");
+     il2cpp_functions::Init();
+@@ -302,14 +335,7 @@
+     auto managerCInfo = managerModInfo.to_c();
+     hasManager = modloader_require_mod(&managerCInfo, CMatchType::MatchType_IdOnly);
+ 
+-    INSTALL_HOOK_ORIG(logger, LevelCollectionViewController_SetData);
+-    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnPointerEnter);
+-    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnPointerExit);
+-    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridView_OnEnable);
+-    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionsGridViewAnimator_AnimateOpen);
+-    INSTALL_HOOK(logger, AnnotatedBeatmapLevelCollectionCell_RefreshAvailabilityAsync);
+-    INSTALL_HOOK(logger, MenuTransitionsHelper_RestartGame);
+-    INSTALL_HOOK_ORIG(logger, LevelCollectionNavigationController_DidActivate);
 +    InstallPlaylistHooks();
  
      SongCore::API::Loading::GetCustomLevelPacksWillRefreshEvent().addCallback(

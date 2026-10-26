@@ -40,7 +40,11 @@ std::vector<std::string> sc2_apple::read_dependencies(std::filesystem::path cons
   if (ec || size > 256 * 1024 * 1024) throw std::runtime_error("unreadable or oversized ELF metadata");
   std::ifstream input(path, std::ios::binary);
   if (!input) throw std::runtime_error("cannot open ELF metadata");
-  std::vector<char> bytes{std::istreambuf_iterator<char>(input), {}};
+  std::vector<char> bytes(static_cast<size_t>(size));
+  if (!input.read(bytes.data(), static_cast<std::streamsize>(size)))
+    throw std::runtime_error("truncated ELF metadata");
+  char extra;
+  if (input.get(extra)) throw std::runtime_error("ELF metadata changed size while reading");
   auto header = read<Header>(bytes, 0);
   if (std::memcmp(header.ident, "\177ELF\2\1\1", 7) || header.machine != 183 || header.type != 3 ||
       header.ehsize != sizeof(Header) || header.shentsize != sizeof(Section) || !header.shnum ||

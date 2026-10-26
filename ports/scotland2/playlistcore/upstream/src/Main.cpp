@@ -319,7 +319,7 @@ static void InstallPlaylistHooks() {
     INSTALL_HOOK_ORIG(logger, LevelCollectionNavigationController_DidActivate);
 }
 
-#ifdef SC2_AOT_HOOKS
+#if defined(SC2_AOT_HOOKS) && SC2_DIAGNOSTICS
 extern "C" void sc2_test_playlistcore_install_hooks() { InstallPlaylistHooks(); }
 #endif
 

@@ -5,9 +5,12 @@
 #include <unordered_map>
 #include <sstream>
 #include <iomanip>
+#include <cstdlib>
+#include <stdexcept>
 
 #define USER_AGENT "https://github.com/RedBrumbler/SongDetails/" VERSION
 namespace SongDetailsCache {
+    [[maybe_unused]] static const auto curlInitialized=curl_global_init(CURL_GLOBAL_ALL);
     static const std::unordered_map<uint8_t, char> hexToChar = {
         {0x0, '0'}, {0x1, '1'}, {0x2, '2'}, {0x3, '3'},
         {0x4, '4'}, {0x5, '5'}, {0x6, '6'}, {0x7, '7'},
@@ -49,13 +52,16 @@ namespace SongDetailsCache {
 
     SongHash HexUtil::ToSongHash(std::string_view hex) {
         try {
-            return *(SongHash*)ToBytes(hex).data();
+            auto bytes=ToBytes(hex);
+            if(bytes.size()!=20)return SongHash();
+            return SongHash(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()));
         } catch (const std::exception& e) {
             return SongHash();
         }
     }
 
     std::vector<uint8_t> HexUtil::ToBytes(std::string_view hex) {
+        if(hex.size()%2)throw std::invalid_argument("Odd hex string length");
         std::vector<uint8_t> result{};
         result.resize(hex.size() / 2);
         char left, right;
@@ -66,7 +72,7 @@ namespace SongDetailsCache {
                 result[byteIdx] = ((charToHex.at(left) << 4) | charToHex.at(right));
             }
         } catch (const std::out_of_range& e) {
-            throw "Hex string has a non-hex character";
+            throw std::invalid_argument("Hex string has a non-hex character");
         }
         return result;
     }
@@ -87,7 +93,7 @@ namespace SongDetailsCache {
 			{
 				ret << ch;
 			}
-			else if ((ch == '%') && IS_HEXDIG(s[i+0]) && IS_HEXDIG(s[i+1]))
+			else if ((ch == '%') && i + 1 < s.size() && IS_HEXDIG(s[i+0]) && IS_HEXDIG(s[i+1]))
 			{
 				ret << s.substr(i-1, 3);
 				i += 2;
@@ -134,10 +140,12 @@ namespace SongDetailsCache {
 	}
 
 	std::size_t CurlWrite_CallbackFunc_StdString(void *contents, std::size_t size, std::size_t nmemb, std::string *s) {
-		std::size_t newLength = size * nmemb;
+		constexpr size_t limit=512ULL*1024*1024;
+        if ((size && nmemb>limit/size) || s->size()>limit || size*nmemb>limit-s->size())return 0;
+        std::size_t newLength = size * nmemb;
 		try {
 			s->append((char*)contents, newLength);
-		} catch(std::bad_alloc &e) {
+		} catch(const std::exception &e) {
 			//handle memory problem
 			CRITICAL("Failed to allocate string of size: {}", newLength);
 			return 0;
@@ -150,10 +158,11 @@ namespace SongDetailsCache {
     }
 
     WebUtil::WebResponse WebUtil::GetAsync_internal(std::string url, uint32_t timeout, std::unordered_map<std::string, std::string> headers) {
-        WebResponse response;
+        WebResponse response{};
 
         // Init curl
         auto* curl = curl_easy_init();
+        if(!curl){response.curlStatus=CURLE_FAILED_INIT;return response;}
         struct curl_slist *curl_headers = NULL;
         for (const auto& [key, value] : headers) {
             curl_headers = curl_slist_append(curl_headers, fmt::format("{}: {}", key, value).c_str());
@@ -174,11 +183,22 @@ namespace SongDetailsCache {
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWrite_CallbackFunc_StdString);
 
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response.content);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, +[](void *data,size_t size,size_t count,std::string *out)->size_t {
+            constexpr size_t limit=1024*1024;
+            if((size && count>limit/size) || out->size()>limit || size*count>limit-out->size())return 0;
+            return CurlWrite_CallbackFunc_StdString(data,size,count,out);
+        });
         curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
         curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, false);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+        if(const char *ca=std::getenv("KL_SCOTLAND2_CA_BUNDLE");ca && *ca)curl_easy_setopt(curl,CURLOPT_CAINFO,ca);
 
-        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
 
         response.curlStatus = curl_easy_perform(curl);
         /* Check for errors */
@@ -186,7 +206,9 @@ namespace SongDetailsCache {
             ERROR("curl_easy_perform() failed: {}: {}", (int)response.curlStatus, curl_easy_strerror(response.curlStatus));
         }
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.httpCode);
+        if(response.curlStatus!=CURLE_OK){response.httpCode=0;response.content.clear();}
         curl_easy_cleanup(curl);
+        curl_slist_free_all(curl_headers);
         return response;
     }
 }

@@ -21,8 +21,8 @@ extern "C" __attribute__((visibility("default"))) int sc2_test_datakeeper_files(
     if(read_file(main)!="TEMP_NOT_BACKED_UP"||read_file(backup/main.filename())!="TEMP_NOT_BACKED_UP")return 5;
     System::IO::File::WriteAllText(local.string(),"SC2_ORIGINAL_LOCAL_SAVE");
     if(read_file(backup/LOCAL_FILES_DIR/local.filename())!="SC2_ORIGINAL_LOCAL_SAVE")return 3;
-    {std::ofstream f(main);f<<"LOCAL_WAS_LOST";}
-    {std::ofstream f(local);f<<"LOCAL_WAS_LOST";}
+    std::filesystem::remove(main);
+    std::filesystem::remove(local);
     CModInfo info{};setup(&info); // same original startup restore path, isolated host fixture only.
     if(read_file(main)!="TEMP_NOT_BACKED_UP"||read_file(local)!="SC2_ORIGINAL_LOCAL_SAVE")return 4;
     for(const auto& p:{main,temp,local,backup/main.filename(),backup/LOCAL_FILES_DIR/local.filename()})std::filesystem::remove(p);

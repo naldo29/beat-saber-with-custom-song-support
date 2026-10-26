@@ -66,11 +66,18 @@ PYLIBS
   if [ "${SC2_TEST_PORTED_WEBUTILS:-0}" = 1 ]; then
     bash ports/scotland2/build-webutils.sh
     cp build/scotland2/android-webutils/libweb-utils.so "$META/libs/"
+    python3 ports/scotland2/tools/build_network_support.py song-details
+    cp build/scotland2/android-song-details/libsongdetails.so "$META/libs/"
   fi
   for NAME in libweb-utils libbeatsaverplusplus libzip libsongdetails; do
     ./build/klepton-ld "$META/libs/$NAME.so" --platform macos -o "$BUNDLE/Frameworks/$NAME.dylib" --quiet
     codesign --force --sign - "$BUNDLE/Frameworks/$NAME.dylib"
   done
+  python3 ports/scotland2/tools/prepare_library_boundary.py --elf "$META/libs/libbeatsaverplusplus.so" \
+    --output "$BUNDLE/Frameworks/libbeatsaverplusplus.dylib" --platform macos \
+    --symbol _ZN9BeatSaver5Utils10ExtractAllENSt6__ndk14spanIKhLm18446744073709551615EEERKNS1_4__fs10filesystem4pathE
+  codesign --force --sign - "$BUNDLE/Frameworks/libbeatsaverplusplus.dylib"
+  export KL_SCOTLAND2_DOWNLOAD_BOUNDARIES=1
   bash ports/scotland2/build-download-probe.sh
   cp build/scotland2/android-download-probe/libsc2_download_probe.so "$META/shims/"
   ./build/klepton-ld "$META/shims/libsc2_download_probe.so" --platform macos -o "$BUNDLE/Frameworks/libsc2_download_probe.dylib" --quiet
@@ -82,6 +89,11 @@ import sys,zipfile
 with zipfile.ZipFile(sys.argv[1],'w',compression=zipfile.ZIP_DEFLATED) as z:
  z.writestr('payload.txt',b'SCOTLAND2_REAL_ZIP_DEFLATE\n'*100)
 PYZIP
+  export SC2_TEST_BAD_ZIP_PATH="$BUNDLE/traversal-test.zip"
+  python3 - "$SC2_TEST_BAD_ZIP_PATH" <<'PYBADZIP'
+import sys,zipfile
+with zipfile.ZipFile(sys.argv[1],'w',compression=zipfile.ZIP_DEFLATED) as z:z.writestr('../escape',b'rejected')
+PYBADZIP
   export SC2_DOWNLOAD_LIBRARIES=1
 fi
 if [ "${SC2_TEST_METACORE:-0}" = 1 ]; then

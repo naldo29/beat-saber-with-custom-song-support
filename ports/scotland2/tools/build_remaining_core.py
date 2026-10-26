@@ -12,13 +12,16 @@ for n,target in [('config-utils',dep/'config-utils'),('autohooks',dep/'autohooks
  assert link.resolve()==target.resolve()
 ndk=Path(os.environ.get('ANDROID_NDK_HOME',ROOT/'port-deps/toolchains/android-ndk-r27c'));cc=ndk/'toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++'
 il2cpp=dep/'libil2cpp/il2cpp'
-includes=[src,src/'include',sdk,dep/'bs-cordl/include',dep/'fmt/include',dep/'utfcpp/source',il2cpp/'libil2cpp',il2cpp/'external/baselib/Include',il2cpp/'external/baselib/Platforms/Android/Include']
+includes=[ROOT/'ports/scotland2/src',src,src/'include',sdk,dep/'bs-cordl/include',dep/'fmt/include',dep/'utfcpp/source',il2cpp/'libil2cpp',il2cpp/'external/baselib/Include',il2cpp/'external/baselib/Platforms/Android/Include']
 flags=['-std=c++20','-O1','-gline-tables-only','-fPIC','-frtti','-fexceptions','-fdeclspec','-fvisibility=hidden','-DANDROID','-DUNITY_2021','-DHAS_CODEGEN','-DNEED_UNSAFE_CSHARP','-DFMT_HEADER_ONLY','-DSC2_AOT_HOOKS','-DVERSION="'+version+'"','-DMOD_ID="'+modid+'"','-Wno-invalid-offsetof','-Wno-extra-qualification','-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
 if name=='unicode':flags+=['-DSC2_UNICODE_APPLE_GLYPHS']
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [a for p in includes for a in ['-I',str(p)]]
 sources=sorted((src/'src').rglob('*.cpp'))
-if name=='datakeeper':sources.append(ROOT/'ports/scotland2/tests/android-datakeeper-files.cpp')
-if name=='unicode':sources.append(ROOT/'ports/scotland2/tests/android-unicode-raster.cpp')
+if name=='datakeeper' and os.environ.get('SC2_BUILD_MODE')!='release':sources.append(ROOT/'ports/scotland2/tests/android-datakeeper-files.cpp')
+if name=='unicode' and os.environ.get('SC2_BUILD_MODE')!='release':sources.append(ROOT/'ports/scotland2/tests/android-unicode-raster.cpp')
 objects=[]
 for source in sources:
  obj=out/(str(source.relative_to(ROOT)).replace('/','_')+'.o');objects.append(obj)

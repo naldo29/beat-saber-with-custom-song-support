@@ -1,4 +1,7 @@
 #include "main.hpp"
+#ifdef SC2_AOT_HOOKS
+#include "safe-save.hpp"
+#endif
 
 #include "GlobalNamespace/BeatmapCharacteristicSO.hpp"
 #include "GlobalNamespace/ColorSchemesSettings.hpp"
@@ -44,19 +47,33 @@ static inline std::string GetLocalsBackupPath() {
 static void HandleSave(std::filesystem::path fullPath, std::string checkPath, std::string backupPath) {
     if (fullPath.parent_path() == checkPath && !std::filesystem::is_directory(fullPath) && !std::regex_search(fullPath.string(), BLACKLIST)) {
         logger.info("Copying for backup: {} -> {}", fullPath.string(), backupPath);
+#ifdef SC2_AOT_HOOKS
+        if (!sc2_save::atomic_copy(fullPath, backupPath / fullPath.filename()))
+            logger.error("Backup failed; previous backup retained: {}", fullPath.string());
+#else
         std::filesystem::copy(fullPath, backupPath / fullPath.filename(), copyopt);
+#endif
     }
 }
 
 static void HandleSave(std::string filePath) {
+#ifdef SC2_AOT_HOOKS
+    try {
+#endif
     auto fullPath = std::filesystem::canonical(filePath);
     logger.info("File saved, path: {} ({})", fullPath.string(), filePath);
 
     HandleSave(fullPath, filesPath, GetBackupPath());
     HandleSave(fullPath, localFilesPath, GetLocalsBackupPath());
+#ifdef SC2_AOT_HOOKS
+    } catch (const std::exception& error) { logger.error("Backup failed: {}",error.what()); }
+#endif
 }
 
 MAKE_AUTO_HOOK_MATCH(File_WriteAllText, &File::WriteAllText, void, StringW path, StringW contents) {
+#ifdef SC2_AOT_HOOKS
+    std::lock_guard<std::recursive_mutex> lock(sc2_save::mutex);
+#endif
     File_WriteAllText(path, contents);
     HandleSave(path);
 }
@@ -70,6 +87,9 @@ MAKE_AUTO_HOOK_MATCH(
     StringW destinationBackupFileName,
     bool ignoreMetadataErrors
 ) {
+#ifdef SC2_AOT_HOOKS
+    std::lock_guard<std::recursive_mutex> lock(sc2_save::mutex);
+#endif
     File_Replace(sourceFileName, destinationFileName, destinationBackupFileName, ignoreMetadataErrors);
     HandleSave(destinationFileName);
 }
@@ -182,7 +202,13 @@ static void CopyFolder(std::string backupFolder, std::string destFolder) {
         for (auto const& file : std::filesystem::directory_iterator(backupFolder)) {
             if (!std::filesystem::is_directory(file)) {
                 logger.info("Loading backup: {}", file.path().string());
+#ifdef SC2_AOT_HOOKS
+                auto dest=std::filesystem::path(destFolder)/file.path().filename();
+                if (sc2_save::should_restore(file.path(),dest) && !sc2_save::atomic_copy(file.path(),dest))
+                    logger.error("Restore failed; destination retained: {}",dest.string());
+#else
                 std::filesystem::copy(file, destFolder / file.path().filename(), copyopt);
+#endif
             }
         }
     } else
@@ -199,8 +225,14 @@ PLAYERDATAKEEPER_EXPORT_FUNC void setup(CModInfo* info) {
     std::filesystem::create_directories(filesPath);
     std::filesystem::create_directories(localFilesPath);
 
+#ifdef SC2_AOT_HOOKS
+    try {
+#endif
     CopyFolder(GetBackupPath(), filesPath);
     CopyFolder(GetLocalsBackupPath(), localFilesPath);
+#ifdef SC2_AOT_HOOKS
+    } catch (const std::exception& error) { logger.error("Restore failed: {}",error.what()); }
+#endif
 
 #ifdef SC2_AOT_HOOKS
     // Installing backup support must preserve the player's current effects settings.

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 static void verify_mod_hooks(kl_image *game,const char *profile_path,const char *owner,unsigned expected) {
     FILE *file=fopen(profile_path,"r");assert(file);
@@ -22,6 +23,24 @@ static void verify_mod_hooks(kl_image *game,const char *profile_path,const char 
         assert(actual && !strcmp(actual,owner));++count;
     }
     assert(feof(file)&&count==expected);fclose(file);
+}
+
+static void check_safe_extract(int (*extract)(const char*,size_t,const char*), const char* label) {
+    const char *good=getenv("SC2_TEST_ZIP_PATH"), *bad=getenv("SC2_TEST_BAD_ZIP_PATH");
+    assert(good && bad);
+    char root[]="/tmp/sc2-extract-XXXXXXXX"; assert(mkdtemp(root));
+    char dest[256],bad_dest[256],file[300];snprintf(bad_dest,sizeof bad_dest,"%s/bad-map",root);snprintf(dest,sizeof dest,"%s/map",root);snprintf(file,sizeof file,"%s/payload.txt",dest);
+    for (int trial=0;trial<3;++trial) {
+        FILE *f=fopen(trial==2?bad:good,"rb");assert(f && !fseek(f,0,SEEK_END));long size=ftell(f);assert(size>0 && size<1024*1024 && !fseek(f,0,SEEK_SET));
+        char *bytes=malloc((size_t)size);assert(bytes && fread(bytes,1,(size_t)size,f)==(size_t)size);fclose(f);
+        int result=extract(bytes,(size_t)size,trial==2?bad_dest:dest);free(bytes);
+        assert(trial==0?result==0:result!=0);
+        f=fopen(file,"rb");assert(f);char data[4096];size_t count=fread(data,1,sizeof data,f);fclose(f);
+        const char expected[]="SCOTLAND2_REAL_ZIP_DEFLATE\n";assert(count==(sizeof expected-1)*100);
+        for(unsigned i=0;i<100;++i)assert(!memcmp(data+i*(sizeof expected-1),expected,sizeof expected-1));
+    }
+    assert(!unlink(file) && !rmdir(dest) && !rmdir(root));
+    fprintf(stderr,"%s_SAFE_EXTRACT_OK translated original entry extracts a real map and preserves existing data on duplicate/malicious inputs\n",label);
 }
 
 int main(int argc, char **argv) {
@@ -39,6 +58,13 @@ int main(int argc, char **argv) {
         return 0;
     }
     assert(start == 0);
+    if(getenv("SC2_TEST_MISSING_DEP")) {
+        assert(!kl_scotland2_open_module(getenv("SC2_TEST_MISSING_DEP"),2));
+        const char *(*error)(void)=kl_shim_lookup("dlerror");
+        const char *message=error();assert(message && strstr(message,"missing dependency"));
+        puts("STRICT_DEPENDENCY_REJECTION_OK unused missing DT_NEEDED rejected before trapping constructor");
+        return 0;
+    }
     if(getenv("SC2_FILESYSTEM_PROBE")) {
         if(getenv("SC2_FS_OBBDIR")) {
             kl_obbmap_init(getenv("SC2_FS_OBBDIR"),getenv("SC2_FS_UE_BASE"));
@@ -191,6 +217,20 @@ int main(int argc, char **argv) {
         // Engine object calls are deliberately deferred to real device startup.
         puts("BSML_LIFECYCLE_CONSUMER_READY imports resolved; Unity calls deferred to device.");
     }
+    if (getenv("SC2_SEARCH_MODULE")) {
+        const char *songcore=getenv("SC2_SEARCH_SONGCORE");assert(songcore);
+        kl_image *song=kl_scotland2_open_module(songcore,2);assert(song && !kl_get_stats(song)->imports_missing);
+        kl_image *search=kl_scotland2_open_module(getenv("SC2_SEARCH_MODULE"),2);
+        if(!search){fprintf(stderr,"SEARCH_LOAD_FAILED %s\n",kl_error());return 1;}
+        const kl_stats *stats=kl_get_stats(search);
+        fprintf(stderr,"SEARCH_IMPORTS bound=%u missing=%u\n",stats->imports_bound,stats->imports_missing);
+        assert(!stats->imports_missing && kl_sym(search,"setup") && kl_sym(search,"late_load"));
+        typedef struct {const char *id,*version;uint64_t version_long;} mod_info;
+        void (*setup)(mod_info*)=kl_sym(search,"setup");mod_info info={0};setup(&info);
+        assert(info.id && info.version && !strcmp(info.id,getenv("SC2_SEARCH_ID")) && !strcmp(info.version,getenv("SC2_SEARCH_VERSION")));
+        fprintf(stderr,"SEARCH_LOAD_SETUP_OK %s %s; original constructors/setup, real game IL2CPP and strict import resolution. No late menu callback or network call.\n",info.id,info.version);
+        sleep(1);return 0;
+    }
     if(getenv("SC2_SONGCORE_PATH")) {
         // The strict module open checks imports before running constructors.
         // SongCore's late callback needs Unity engine objects and is device-only.
@@ -251,16 +291,29 @@ int main(int argc, char **argv) {
         assert(network && !kl_get_stats(network)->imports_missing);
         int (*request)(const char*)=kl_sym(network,"sc2_test_webutils");assert(request);
         if(getenv("SC2_TEST_WEBUTILS_URL")) {
+            int (*safety)(const char*)=kl_sym(network,"sc2_test_webutils_callback_safety");assert(safety && !safety(getenv("SC2_TEST_WEBUTILS_URL")));
+            puts("WEBUTILS_CALLBACK_SAFETY_OK invalid URLs fail and progress callback exceptions abort the request without unwinding through curl");
             int network_result=request(getenv("SC2_TEST_WEBUTILS_URL"));
             fprintf(stderr,"WebUtils network consumer result: %d\n",network_result);if(network_result)return 1;
-            puts("DOWNLOAD_HTTPS_OK actual released WebUtils performed verified HTTPS and returned a nonempty successful response.");
+            puts("DOWNLOAD_HTTPS_OK original WebUtils performed verified HTTPS and returned a nonempty successful response.");
         }
         if(getenv("SC2_TEST_WEBUTILS_BAD_TLS")) {
             int (*reject_bad_tls)(const char*)=kl_sym(network,"sc2_test_webutils_reject_bad_tls");assert(reject_bad_tls);
             if(reject_bad_tls(getenv("SC2_TEST_WEBUTILS_BAD_TLS")))return 1;
             puts("DOWNLOAD_BAD_TLS_REJECTED_OK original WebUtils/curl rejects an untrusted HTTPS certificate even for callers using its old default option.");
         }
-        puts("DOWNLOAD_LIBRARIES_LOAD_OK actual released WebUtils/BeatSaverPlusPlus/zip/SongDetails constructors and imports passed; network checks reported separately.");
+        if(getenv("SC2_TEST_BAD_ZIP_PATH")) {
+            int (*extract)(const char*,size_t,const char*)=kl_sym(network,"sc2_test_beatsaver_safe_extract");assert(extract);check_safe_extract(extract,"BEATSAVER");
+        }
+        kl_image *details=kl_find_image("libsongdetails.so");
+        int (*hashes)(void)=kl_sym(details,"sc2_test_songdetails_hashes");assert(hashes && !hashes());
+        int (*payloads)(void)=kl_sym(details,"sc2_test_songdetails_payloads");assert(payloads && !payloads());
+        puts("SONGDETAILS_PAYLOAD_BOUNDS_OK real protobuf count/hash validation, valid database, malformed replacement preserves state, invalid Brotli rejected");
+        puts("SONGDETAILS_HASH_BOUNDS_OK malformed/short hashes rejected by original library helper");
+        int (*tls)(const char*,int)=kl_sym(details,"sc2_test_songdetails_tls");assert(tls);
+        if(getenv("SC2_TEST_WEBUTILS_URL")){assert(!tls(getenv("SC2_TEST_WEBUTILS_URL"),1));puts("SONGDETAILS_HTTPS_OK original library verified HTTPS");}
+        if(getenv("SC2_TEST_WEBUTILS_BAD_TLS")){assert(!tls(getenv("SC2_TEST_WEBUTILS_BAD_TLS"),0));puts("SONGDETAILS_BAD_TLS_REJECTED_OK original library rejected untrusted certificate");}
+        puts("DOWNLOAD_LIBRARIES_LOAD_OK original WebUtils/BeatSaverPlusPlus/zip/SongDetails constructors and imports passed; network checks reported separately.");
     }
     if(getenv("SC2_TEST_METACORE")) {
         kl_image *meta=kl_find_image("libmetacore.so");assert(meta && !kl_get_stats(meta)->imports_missing);
@@ -317,12 +370,17 @@ int main(int argc, char **argv) {
         mod_info info={0};setup(&info);
         assert(info.id&&!strcmp(info.id,"SongDownloader")&&info.version&&!strcmp(info.version,"0.8.8"));
         int (*zip)(const char*)=kl_sym(browser,"sc2_test_songdownloader_zip");assert(zip&&!zip(getenv("SC2_TEST_ZIP_PATH")));
+        if(getenv("SC2_TEST_BAD_ZIP_PATH")) {
+            int (*extract)(const char*,size_t,const char*)=kl_sym(browser,"sc2_test_songdownloader_safe_extract");assert(extract);check_safe_extract(extract,"SONGDOWNLOADER");
+        }
         puts("SONGDOWNLOADER_ZIP_OK original browser's own pinned kuba zip read and decompressed fixture.");
         if(getenv("SC2_TEST_WEBUTILS_URL")) {
             int (*request)(const char*)=kl_sym(browser,"sc2_test_songdownloader_request");assert(request);
             if(request(getenv("SC2_TEST_WEBUTILS_URL")))return 1;
             int (*api)(void)=kl_sym(browser,"sc2_test_songdownloader_api");assert(api);
             if(api())return 1;
+            int (*callback_safety)(const char*)=kl_sym(browser,"sc2_test_songdownloader_callback_safety");assert(callback_safety && !callback_safety(getenv("SC2_TEST_WEBUTILS_URL")));
+            puts("SONGDOWNLOADER_CALLBACK_SAFETY_OK progress callback failure becomes a failed request");
             puts("SONGDOWNLOADER_API_OK actual browser curl verified HTTPS, fetched and parsed a nonempty BeatSaver page through original API code.");
         }
         if(getenv("SC2_TEST_SONGDOWNLOADER_BAD_TLS")) {
@@ -384,7 +442,7 @@ int main(int argc, char **argv) {
             for (unsigned i=0;i<sizeof names/sizeof *names;++i) {
                 void **entry=kl_sym(bs,names[i]);assert(kl_aot_original(*entry));
             }
-            kl_image *probe=open(getenv("KL_SCOTLAND2_CUSTOMTYPES_PROBE"),2);
+            kl_image *probe=open(getenv("SC2_CT_REGISTRATION_PROBE"),2);
             assert(probe && !kl_get_stats(probe)->imports_missing);
             int (*run)(void)=kl_sym(probe,"sc2_test_customtypes_register");assert(run);
             int result=run();

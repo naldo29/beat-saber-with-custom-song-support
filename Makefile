@@ -17,10 +17,11 @@ CFLAGS  := -g -O1 -Wall -Wextra -Wno-unused-parameter -arch arm64 $(MVK_INC) $(R
 # are in the base LDLIBS rather than on one target because kl_vtdec is in
 # RUNTIME_SHIP — everything that links the runtime needs them. Metal likewise,
 # for kl_mtl_foveate.m, which makes descriptors of its own.
+CFLAGS += $(REPRO_FLAGS)
 LDLIBS  := -lz -framework AudioToolbox -framework CoreAudio \
            -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface \
            -framework CoreFoundation -framework AVFoundation -framework Foundation \
-           -framework Metal -framework CoreText -framework CoreGraphics
+           -framework Metal
 # The host/ship split is a source-list boundary, not a runtime getenv.
 #
 # RUNTIME_SHIP is everything that goes into the visionOS app bundle. It is the
@@ -77,12 +78,32 @@ RUNTIME_SHIP := $(LX_SRC) runtime/guest/kl_linuxproc.c \
            runtime/guest/kl_mono.c \
            runtime/guest/kl_il2cpp.c runtime/kl_fault.c runtime/guest/kl_guestpatch.c \
            runtime/guest/kl_guestpoke.c runtime/kl_cacerts.c runtime/media/kl_phonon_hrtf.S \
-           runtime/media/kl_menu_font.S runtime/media/kl_unicode.m \
+           runtime/media/kl_menu_font.S \
            runtime/diag/kl_sample.c runtime/diag/kl_mprobe.c runtime/diag/kl_stall.c runtime/diag/kl_metrics.c \
-           runtime/guest/kl_songprobe.c runtime/guest/kl_scotland2.c runtime/guest/kl_aot_hooks.c \
+           runtime/guest/kl_extension.c runtime/guest/kl_aot_hooks.c \
            runtime/guest/kl_songs.c
 RUNTIME_DIAG := runtime/diag/kl_metadump.c
 RUNTIME := $(RUNTIME_SHIP) $(RUNTIME_DIAG)
+
+# Scotland2 is an optional leaf component. Host-specific tests opt in by target.
+KLEPTON_SCOTLAND2 ?= $(if $(filter build/t_scotland2%,$(MAKECMDGOALS)),1,0)
+ifeq ($(KLEPTON_SCOTLAND2),1)
+SC2_FRAMEWORKS := -framework CoreText -framework CoreGraphics
+RUNTIME_INC += -Iports/scotland2/include
+SC2_DIAGNOSTICS := $(if $(filter release,$(SC2_BUILD_MODE)),0,1)
+SC2_DEFINES := -DKL_GUEST_EXTENSION_BUILTIN -DSC2_DIAGNOSTICS=$(SC2_DIAGNOSTICS)
+CFLAGS += -Iports/scotland2/include $(SC2_DEFINES)
+LDLIBS += $(SC2_FRAMEWORKS)
+RUNTIME_SHIP += ports/scotland2/src/host-bridge.c ports/scotland2/src/apple-unicode.m
+RUNTIME := $(RUNTIME_SHIP) $(RUNTIME_DIAG)
+endif
+
+# A source-list switch must rebuild archives and host fixtures in both directions.
+.PHONY: runtime-selection-force
+build/runtime-selection: runtime-selection-force
+	@mkdir -p build
+	@printf '%s\n' 'scotland2=$(KLEPTON_SCOTLAND2) diagnostics=$(SC2_DIAGNOSTICS)' > $@.tmp
+	@cmp -s $@.tmp $@ && rm $@.tmp || mv $@.tmp $@
 
 # ...and every header they include, as a PREREQUISITE (never as a compiler
 # input — a .h on the command line is compiled as a header, not included).
@@ -98,7 +119,7 @@ RUNTIME := $(RUNTIME_SHIP) $(RUNTIME_DIAG)
 # that measured a build nobody has.
 # kl_phonon_hrtf.S .incbins the SOFA blob, so the data file is a prerequisite
 # of everything too — same missed-FAILURE argument as the generated tables.
-RUNTIME_ALL_HDRS := $(wildcard runtime/*.h) $(wildcard runtime/*/*.h)
+RUNTIME_ALL_HDRS := $(wildcard runtime/*.h) $(wildcard runtime/*/*.h) $(wildcard ports/scotland2/include/*.h) build/runtime-selection Makefile
 RUNTIME_HDRS := $(RUNTIME_ALL_HDRS) $(wildcard tests/*.h) \
                 runtime/data/phonon_hrtf_cipic_124.sofa \
                 runtime/data/kl_menu_font.ttf
@@ -1401,7 +1422,7 @@ XROS_LIBS  := $(foreach p,$(XROS_PLATFORMS),build/$(p)/libklepton.a)
 # fails; a Vulkan guest simply reports that the hardware does not meet its
 # requirements, on device only). Nothing links against MoltenVK either way —
 # kl_vulkan.c is VK_NO_PROTOTYPES and dlopens it — so this is headers only.
-XROS_CFLAGS := -g -O1 -Wall -Wextra -Wno-unused-parameter -arch arm64 $(MVK_INC) $(RUNTIME_INC)
+XROS_CFLAGS := $(REPRO_FLAGS) $(SC2_DEFINES) -g -O1 -Wall -Wextra -Wno-unused-parameter -arch arm64 $(MVK_INC) $(RUNTIME_INC)
 
 .PHONY: xros xros-device xros-sim swiftcheck
 xros: $(XROS_GATES) build/Klepton.xcframework swiftcheck
@@ -1449,7 +1470,7 @@ swiftcheck:
 # stopped at the archives and left this behind it.
 build/xros/libklepton.a: $(RUNTIME_SHIP) $(RUNTIME_ALL_HDRS) $(FZ_DEPS)
 	@mkdir -p build/xros
-	@rm -f $@
+	@rm -f $@ $(@D)/*.o
 	@for s in $(RUNTIME_SHIP); do \
 	  o=build/xros/$$(basename $$s | sed 's/\.[cSm]$$/.o/'); \
 	  $(CC) $(XROS_CFLAGS) -target arm64-apple-xros1.0 -isysroot $(XROS_SDK) \
@@ -1459,7 +1480,7 @@ build/xros/libklepton.a: $(RUNTIME_SHIP) $(RUNTIME_ALL_HDRS) $(FZ_DEPS)
 
 build/xrsim/libklepton.a: $(RUNTIME_SHIP) $(RUNTIME_ALL_HDRS) $(FZ_DEPS)
 	@mkdir -p build/xrsim
-	@rm -f $@
+	@rm -f $@ $(@D)/*.o
 	@for s in $(RUNTIME_SHIP); do \
 	  o=build/xrsim/$$(basename $$s | sed 's/\.[cSm]$$/.o/'); \
 	  $(CC) $(XROS_CFLAGS) -target arm64-apple-xros1.0-simulator -isysroot $(XRSIM_SDK) \
@@ -1474,14 +1495,14 @@ build/xros/libklepton.dylib: build/xros/libklepton.a
 	@$(CC) -target arm64-apple-xros1.0 -isysroot $(XROS_SDK) -arch arm64 \
 	   -dynamiclib -o $@ -Wl,-all_load $< -lz -lc++ -framework AudioToolbox \
 	   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface \
-	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal -framework CoreText -framework CoreGraphics \
+	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal $(SC2_FRAMEWORKS) \
 	   -install_name @rpath/libklepton.dylib
 
 build/xrsim/libklepton.dylib: build/xrsim/libklepton.a
 	@$(CC) -target arm64-apple-xros1.0-simulator -isysroot $(XRSIM_SDK) -arch arm64 \
 	   -dynamiclib -o $@ -Wl,-all_load $< -lz -lc++ -framework AudioToolbox \
 	   -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface \
-	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal -framework CoreText -framework CoreGraphics \
+	   -framework CoreFoundation -framework AVFoundation -framework Foundation -framework Metal $(SC2_FRAMEWORKS) \
 	   -install_name @rpath/libklepton.dylib
 
 xros-device: build/xros/libklepton.dylib

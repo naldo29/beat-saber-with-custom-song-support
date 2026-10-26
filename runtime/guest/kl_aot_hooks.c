@@ -1,4 +1,5 @@
 #include "kl_aot_hooks.h"
+#include "kl_env.h"
 #include <mach-o/dyld.h>
 #include <mach-o/getsect.h>
 #include <mach-o/loader.h>
@@ -187,7 +188,7 @@ int kl_aot_attach(const struct mach_header_64 *mh, const void *elf) {
         __atomic_store_n((uintptr_t *)(base+entries[i].slot),base+entries[i].original,__ATOMIC_RELEASE);
     *m=(module){.mach=mh,.header=header,.entries=entries,.references=1,.next=modules}; modules=m;
     pthread_mutex_unlock(&lock);
-    fprintf(stderr,"[scotland2] AOT_READY %u precompiled hook entries; executable pages unchanged\n",header->count);
+    if (kl_env_on("KL_TRACE_AOT",0)) fprintf(stderr,"[scotland2] AOT_READY %u precompiled hook entries; executable pages unchanged\n",header->count);
     return 0;
 }
 void kl_aot_detach(const struct mach_header_64 *mh) {

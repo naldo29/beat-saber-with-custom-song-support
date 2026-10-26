@@ -66,6 +66,18 @@ int main(void) {
     word=1;
     operation=(1u<<28)|(0xfffu<<12)|1u;
     assert(futex(&other,WAKE_OP,1,(void *)1,&word,operation)==0 && word==0);
+    errno=0;assert(futex(NULL,WAIT,0,NULL,NULL,0)==-1 && errno==EFAULT);
+    errno=0;assert(futex((int32_t*)((char*)&word+1),WAIT,0,NULL,NULL,0)==-1 && errno==EINVAL);
+    errno=0;assert(futex(&word,WAKE,UINT32_MAX,NULL,NULL,0)==-1 && errno==EINVAL);
+    struct timespec excessive={.tv_sec=INT64_MAX,.tv_nsec=999999999};word=0;
+    errno=0;assert(futex(&word,WAIT,0,&excessive,NULL,0)==-1 && errno==EINVAL);
+    // A pending cancellation must not leave a stack waiter or locked bucket.
+    job canceled={.word=&word,.mask=8};pthread_t ct;
+    assert(!pthread_create(&ct,NULL,waiter,&canceled));
+    while(!atomic_load(&canceled.ready))usleep(100);
+    usleep(10000);assert(!pthread_cancel(ct));
+    assert(wake_eventually(&word,WAKE_BITSET,8)==1);pthread_join(ct,NULL);
+    assert(futex(&word,WAKE,INT_MAX,NULL,NULL,0)==0);
     puts("PASS: futex actual/zero wake counts, mask/address isolation, timeout removal and conditional atomic wake operations.");
     return 0;
 }

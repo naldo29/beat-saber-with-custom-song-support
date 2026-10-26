@@ -131,7 +131,6 @@ namespace SongDetailsCache {
     void SongDetailsContainer::Process(const Structs::SongDetailsV3& parsedContainer, bool force) {
         if (!force && songs) return;
 
-        scrapeEndedTimeUnix = std::chrono::sys_seconds(std::chrono::seconds(parsedContainer.scrapeendedunix()));
         auto& parsedField = parsedContainer.songs();
 
         if (parsedField.size() == 0) {
@@ -139,6 +138,17 @@ namespace SongDetailsCache {
             return;
         }
         const auto len = parsedField.size();
+        if(len>1000000 || parsedContainer.taglist_size()>64 ||
+           parsedContainer.songhashes().size()!=static_cast<size_t>(len)*HASH_SIZE_BYTES) {
+            ERROR("Rejected invalid SongDetails counts/hash payload");return;
+        }
+        size_t totalDifficulties = 0;
+        for (const auto& song : parsedField) {
+            totalDifficulties += song.difficulties_size();
+            if (song.difficulties_size() > 255 || totalDifficulties > 8000000) {
+                ERROR("Rejected excessive SongDetails difficulty count"); return;
+            }
+        }
         StopWatch sw; sw.Start();
 
         std::vector<const Structs::SongV3*> parsed;
@@ -181,13 +191,13 @@ namespace SongDetailsCache {
         }
 
         // Cast it to a vector of SongHashes
-        auto songHashesRaw = reinterpret_cast<const SongHash*>(parsedContainer.songhashes().data());
+        const auto& songHashesRaw = parsedContainer.songhashes();
         for (std::size_t i = 0; i < len; i++) {
             const auto& parsedSong = parsed[i];
             uint8_t diffCount = std::min(255, parsedSong->difficulties_size());
             const auto& builtSong = newSongs->emplace_back(i, diffIndex, diffCount, parsedSong);
             newKeys->emplace_back(parsedSong->mapid());
-            newHashes->emplace_back(songHashesRaw[i]);
+            newHashes->emplace_back(std::string(songHashesRaw.data() + i * HASH_SIZE_BYTES, HASH_SIZE_BYTES));
 
             newSongNames->emplace_back(parsedSong->songname());
             newSongAuthorNames->emplace_back(parsedSong->songauthorname());
@@ -221,6 +231,7 @@ namespace SongDetailsCache {
         if (!force && songs) return;
 
         INFO("Assigning new values");
+        scrapeEndedTimeUnix = std::chrono::sys_seconds(std::chrono::seconds(parsedContainer.scrapeendedunix()));
         songs = newSongs;
         keys = newKeys;
         hashBytes = newHashes;
@@ -241,6 +252,11 @@ namespace SongDetailsCache {
         }
     }
 
-    SongHash::SongHash(const std::string& str) : SongHash() { std::memcpy((void*)&c1, str.c_str(), SongDetailsContainer::HASH_SIZE_BYTES); }
+    template<class T> static T HashPiece(const std::string& str, size_t offset) {
+        T value = 0;
+        if (str.size() == 20) std::memcpy(&value, str.data() + offset, sizeof value);
+        return value;
+    }
+    SongHash::SongHash(const std::string& str) : c1(HashPiece<uint32_t>(str,0)), c2(HashPiece<uint64_t>(str,4)), c3(HashPiece<uint64_t>(str,12)) {}
     SongHash::SongHash() : c1(0), c2(0), c3(0) {}
 }

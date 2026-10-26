@@ -1,67 +1,43 @@
-# Beat Saber with Custom Song Support
+# Beat Saber custom songs for visionOS
 
-Standalone custom songs for the Quest version of Beat Saber on Apple Vision Pro,
-using Klepton and the actual Scotland2 mod stack. Forked from
-[myMartek/Klepton](https://github.com/myMartek/Klepton), built for AVP Play.
+A standalone Klepton builder for Beat Saber **1.40.8_7379**, using the original
+Scotland2 loader, SongCore and SongDownloader. It prepares selected native hooks
+before code signing and keeps executable-memory restrictions enabled.
 
-## What works
+The selected composition has ten original core mods: custom-types, Lapiz, BSML,
+SongCore, PlaylistCore, Paper, SongDownloader, Unicode, PlayerDataKeeper and
+MetaCore. Fake ID is excluded. Exact versions, inputs and runtime components are
+recorded in [selected-mods.json](ports/scotland2/selected-mods.json).
 
-Tested on a physical Vision Pro with Beat Saber **1.40.8_7379**:
+Release mode removes the temporary Unicode test button, observer modules and
+port test controls, including the Advanced › Test panel and its saved overrides. Original mod menus and song downloading remain part of the
+application. PlayerDataKeeper backs up saves through atomic replacement; updates
+must retain the same bundle identifier and application data.
 
-- Scotland2's real dependency loading and early/late mod startup.
-- Original SongDownloader in-game browsing, downloading and extraction.
-- Original SongCore loading and playback of downloaded custom songs.
-- Repeated downloads: SongCore loaded one, then two, then three songs in the tested session.
-- custom-types, Lapiz, BSML, Paperlog, MetaCore and PlaylistCore running together.
-- Unicode texture upload and CJK/emoji cache passed, and PlayerDataKeeper
-  created a backup identical to the real player save.
-- The current selection contains ten original core mods. Fake ID is excluded
-  because Klepton already supplies the adult age-category response. The user
-  confirmed the updated build still reaches the menu and plays a custom song.
+## Build and update
 
-This uses the original mods. The separate earlier song-loader prototype is disabled
-(`KL_SONGS=0`) in the Scotland2 build.
+See [CUSTOM-SONGS.md](CUSTOM-SONGS.md) for the supported inputs and builder
+command. Supply your own matching game, Apple signing team and app identifier.
+Build outputs are private and separate from this source tree. The builder does
+not install, launch, uninstall or reset application data.
 
-## Installation status
+The shareable source package contains first-party code, adaptation patches,
+verified download manifests and notices. It reconstructs original third-party
+source locally from pinned public inputs. Game files, maps, saves, signed apps,
+provisioning profiles and private evidence are excluded.
 
-**Developer source preview. There is no ready-to-install public IPA or one-click
-AVP Play integration yet.** The successful build was assembled and tested locally.
-A fresh-machine dependency/bootstrap process still needs packaging and validation.
-See [CUSTOM-SONGS.md](CUSTOM-SONGS.md) for the build layout and limitations, and
-[BUILDING.md](BUILDING.md) for the underlying Klepton prerequisites.
+## Verification and scope
 
-Bring your own purchased Beat Saber game files. This repository contains no APK,
-OBB, translated Beat Saber frameworks, saved games, songs, or Apple signing keys.
-The prepared hooks are tied to the exact tested game build; other versions must
-be independently prepared and verified.
+[Audit report](docs/cleanup/AUDIT-REPORT.md) ·
+[Validation report](docs/cleanup/VALIDATION-REPORT.md) ·
+[Release checklist](docs/cleanup/RELEASE-CHECKLIST.md) ·
+[Architecture](docs/cleanup/ARCHITECTURE.md)
 
-The result installed on a headset is one visionOS app with the adapted mods
-baked into its signed bundle. An Android APK patched with mods alone cannot
-replace the required modified Klepton runtime.
+Those reports distinguish completed checks from pending checks. A successful
+build does not establish device gameplay, long-session stability, arbitrary QMOD
+compatibility, other game versions or stock AVP Play integration. This is a
+standalone builder, not an App Store package.
 
-## What is still unverified
-
-- Every map format, every playlist feature, full-song completion and long sessions.
-- Restart/update persistence across all settings and scores.
-- Arbitrary third-party Quest mods. This is not a universal QMOD installer.
-- Extended gameplay with the current ten-mod selection, full-song completion
-  and long sessions. Menu and custom-song playback passed after removing Fake ID.
-
-## Integration scope
-
-The AVP Play desktop app is unchanged. This fork changes the Klepton runtime
-and generated game app to support signed mod loading and prepared hooks. The
-current implementation is a working developer port, not yet a minimized upstream
-integration. See [INTEGRATION-REVIEW.md](INTEGRATION-REVIEW.md) for the required
-interfaces, implementation choices and remaining cleanup.
-
-## Source and credits
-
-Klepton is by Max Thomas, with the AVP Play toolchain work by myMartek and its
-contributors. Original upstream documentation is retained in
-[UPSTREAM-README.md](UPSTREAM-README.md). Original mod sources, licenses, version
-pins and source patches are under [ports/scotland2](ports/scotland2). Dependency
-pins are under `port-deps/sources`; the public QMOD inventory is under
-`port-results/coremods/coremods-lock.json`. Generated builds, device logs and
-private signing material are excluded. Retain the relevant upstream licenses
-when redistributing components.
+[Klepton's original documentation](UPSTREAM-README.md) and [license](LICENSE)
+remain available. Original sources and their licenses remain attributed in the
+input manifests and third-party notices.

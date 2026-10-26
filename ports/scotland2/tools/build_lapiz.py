@@ -21,6 +21,9 @@ flags=['-std=c++20','-O1','-g','-fPIC','-frtti','-fexceptions','-fvisibility=hid
     '-DANDROID','-DUNITY_2021','-DHAS_CODEGEN','-DNEED_UNSAFE_CSHARP','-DFMT_HEADER_ONLY','-DSC2_AOT_HOOKS',
     '-DVERSION="0.2.23"','-DVERSION_LONG=0','-DMOD_ID="lapiz"','-Wno-invalid-offsetof','-Wno-extra-qualification',
     '-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [arg for path in includes for arg in ['-I',str(path)]]
 sources=sorted(src.rglob('*.cpp'))
 # Hash the working mod and port adapters. Pinned SDK archives are recorded in

@@ -49,7 +49,7 @@ namespace SongDownloader {
 
 DEFINE_TYPE(SongDownloader, DownloadSongsSearchViewController);
 
-int DownloadSongsSearchViewController::searchIndex = 0;
+std::atomic_int DownloadSongsSearchViewController::searchIndex{0};
 
 int DownloadSongsSearchViewController::searchPage = 0;
 
@@ -119,67 +119,57 @@ void DownloadSongsSearchViewController::CreateEntries(Transform* parent) {
                     this->GoToSong(entry);
                     return;
                 }
-                if (entry.MapType == SearchEntry::MapType::BeatSaver) {
-                    auto hash = entry.GetBeatmap().GetVersions().front().GetHash();
-                    entry.status = SearchEntry::DownloadStatus::Downloading;
-                    BeatSaver::API::DownloadBeatmapAsync(entry.GetBeatmap(),
-                        [this, hash, &entry](bool error) {
-                            if (!error) {
-                                if (auto playlist = DownloadSongsPlaylistViewController::GetSelectedPlaylist()) {
-                                    auto& json = playlist->playlistJSON;
-                                    json.Songs.emplace_back().Hash = hash;
-                                    playlist->Save();
-                                    PlaylistCore::MarkPlaylistForReload(playlist);
-                                }
-                                entry.status = SearchEntry::DownloadStatus::Downloaded;
-                                // Update download progress to 100% in GUI
-                                entry.UpdateDownloadProgress(false);
-                                SongCore::API::Loading::RefreshSongs(false).wait();
-                                // Trigger checking for if the song is loaded
-                                entry.UpdateDownloadProgress(true);
-                                   
-                            } else {
-                                entry.status = SearchEntry::DownloadStatus::Failed;
-                            }
-                        },
-                        [&entry, hash](float percentage) {
-                            if (entry.GetBeatmap().GetVersions().front().GetHash() == hash) {
-                                entry.downloadProgress = percentage;
-                                entry.UpdateDownloadProgress(false);
-                            }
-                        }
-                    );
-                }
-                else {
-                    auto hash = entry.GetSongScoreSaber().GetSongHash();
-                    entry.status = SearchEntry::DownloadStatus::Downloading;
-                    BeatSaver::API::DownloadBeatmapAsync(entry.GetSongScoreSaber(),
-                        [this, hash, &entry](bool error) {
-                            if (!error) {
-                                if (auto playlist = DownloadSongsPlaylistViewController::GetSelectedPlaylist()) {
-                                    auto& json = playlist->playlistJSON;
-                                    json.Songs.emplace_back().Hash = hash;
-                                    playlist->Save();
-                                    PlaylistCore::MarkPlaylistForReload(playlist);
-                                }
-                                
-                                entry.status = SearchEntry::DownloadStatus::Downloaded;
-                                entry.UpdateDownloadProgress(false);
-                                SongCore::API::Loading::RefreshSongs(false).wait();
-                                entry.status = SearchEntry::DownloadStatus::Loaded;
-                                entry.UpdateDownloadProgress(true);
-                            } else {
-                                entry.status = SearchEntry::DownloadStatus::Failed;
-                            }
-                        },
-                        [&entry, hash](float percentage) {
-                            if (entry.GetSongScoreSaber().GetSongHash() == hash) {
-                                entry.downloadProgress = percentage;
-                                entry.UpdateDownloadProgress(false);
+                if (entry.MapType == SearchEntry::MapType::BeatSaver && entry.GetBeatmap().GetVersions().empty()) return;
+                const auto hash = entry.GetSongHash();
+                const int generation = searchIndex.load();
+                SafePtrUnity<DownloadSongsSearchViewController> owner(this);
+                const auto row = &entry - searchEntries;
+                auto isCurrent = [owner, row, hash, generation]() {
+                    return owner && generation == searchIndex.load() && owner->searchEntries[row].GetSongHash() == hash;
+                };
+                entry.status = SearchEntry::DownloadStatus::Downloading;
+                entry.UpdateDownloadProgress(false);
+                auto finished = [owner, row, hash, generation, isCurrent](bool error) {
+                    // Refresh stays on the download worker; Unity and playlist state stay on the main thread.
+                    BSML::MainThreadScheduler::Schedule([owner, row, error, isCurrent] {
+                        if (!isCurrent()) return;
+                        auto& current = owner->searchEntries[row];
+                        current.status = error ? SearchEntry::DownloadStatus::Failed : SearchEntry::DownloadStatus::Downloaded;
+                        current.UpdateDownloadProgress(false);
+                    });
+                    if (error) return;
+                    bool refreshed = true;
+                    try { SongCore::API::Loading::RefreshSongs(false).wait(); }
+                    catch (...) { refreshed = false; }
+                    BSML::MainThreadScheduler::Schedule([owner, row, hash, generation, isCurrent, refreshed] {
+                        // Playlist access is main-thread-only, even when a search page has changed.
+                        if (!owner || generation != searchIndex.load()) return;
+                        if (auto playlist = DownloadSongsPlaylistViewController::GetSelectedPlaylist()) {
+                            auto& songs = playlist->playlistJSON.Songs;
+                            if (std::none_of(songs.begin(), songs.end(), [&hash](const auto& song) { return song.Hash == hash; })) {
+                                songs.emplace_back().Hash = hash;
+                                playlist->Save();
+                                PlaylistCore::MarkPlaylistForReload(playlist);
                             }
                         }
-                    );
-                }
+                        if (!isCurrent()) return;
+                        auto& current = owner->searchEntries[row];
+                        if (!refreshed) current.status = SearchEntry::DownloadStatus::Failed;
+                        current.UpdateDownloadProgress(refreshed);
+                    });
+                };
+                auto progress = [owner, row, isCurrent](float percentage) {
+                    BSML::MainThreadScheduler::Schedule([owner, row, percentage, isCurrent] {
+                        if (!isCurrent()) return;
+                        auto& current = owner->searchEntries[row];
+                        current.downloadProgress = percentage;
+                        current.UpdateDownloadProgress(false);
+                    });
+                };
+                if (entry.MapType == SearchEntry::MapType::BeatSaver)
+                    BeatSaver::API::DownloadBeatmapAsync(entry.GetBeatmap(), finished, progress);
+                else
+                    BeatSaver::API::DownloadBeatmapAsync(entry.GetSongScoreSaber(), finished, progress);
             }
         ));
     }
@@ -196,11 +186,11 @@ std::optional<bool> StringToBool(std::string value) {
 void DownloadSongsSearchViewController::SearchKey(int currentSearchIndex) {
     if (!DownloadSongsSearchViewController::SearchQuery.empty()) {
         BeatSaver::API::GetBeatmapByKeyAsync(DownloadSongsSearchViewController::SearchQuery,
-            [this, currentSearchIndex](std::optional<BeatSaver::Beatmap> beatmap) {
+            [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<BeatSaver::Beatmap> beatmap) {
                 if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                     BSML::MainThreadScheduler::Schedule(
-                        [this, currentSearchIndex, beatmap] {
-                            if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                        [this, currentSearchIndex, beatmap, owner] {
+                            if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                                 if (beatmap.has_value()) {
                                     loadingControl->Hide();
                                     searchEntries[0].SetBeatmap(beatmap.value());
@@ -209,7 +199,7 @@ void DownloadSongsSearchViewController::SearchKey(int currentSearchIndex) {
                                     }
                                 }
                                 else {
-                                    if (!BeatSaver::API::exception.empty()) loadingControl->ShowText(BeatSaver::API::exception, true);
+                                    if (!BeatSaver::API::GetException().empty()) loadingControl->ShowText(BeatSaver::API::GetException(), true);
                                     else loadingControl->ShowText("No Song Found for Key!", true);
                                 }
                             }
@@ -224,11 +214,11 @@ void DownloadSongsSearchViewController::SearchKey(int currentSearchIndex) {
 
 void DownloadSongsSearchViewController::SearchSongs(int currentSearchIndex) {
     BeatSaver::API::SearchPagedAsync(DownloadSongsSearchViewController::SearchQuery, DownloadSongsSearchViewController::searchPage,
-        [this, currentSearchIndex](std::optional<BeatSaver::Page> page) {
+        [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<BeatSaver::Page> page) {
             if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                 BSML::MainThreadScheduler::Schedule(
-                    [this, currentSearchIndex, page] {
-                        if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                    [this, currentSearchIndex, page, owner] {
+                        if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                             if (page.has_value() && !page.value().GetDocs().empty()) {
                                 auto maps = page.value().GetDocs();
                                 auto mapsSize = maps.size();
@@ -247,7 +237,7 @@ void DownloadSongsSearchViewController::SearchSongs(int currentSearchIndex) {
                                 }
                             }
                             else {
-                                if (!BeatSaver::API::exception.empty()) loadingControl->ShowText(BeatSaver::API::exception, true);
+                                if (!BeatSaver::API::GetException().empty()) loadingControl->ShowText(BeatSaver::API::GetException(), true);
                                 else if (DownloadSongsSearchViewController::SearchQuery.empty()) loadingControl->ShowText("No Results,\nis your Internet working?", true);
                                 else loadingControl->ShowText("No Songs Found!", true);
                             }
@@ -267,15 +257,16 @@ void DownloadSongsSearchViewController::SearchSongs(int currentSearchIndex) {
 void DownloadSongsSearchViewController::SearchUser(int currentSearchIndex) {
     if (!DownloadSongsSearchViewController::SearchQuery.empty()) {
         BeatSaver::API::GetUserByNameAsync(DownloadSongsSearchViewController::SearchQuery,
-            [this, currentSearchIndex](std::optional<BeatSaver::UserDetail> User) {
+            [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<BeatSaver::UserDetail> User) {
                 BSML::MainThreadScheduler::Schedule(
-                    [this, currentSearchIndex, User]() {
+                    [this, currentSearchIndex, User, owner]() {
+                        if (!owner || currentSearchIndex != searchIndex.load()) return;
                         if (User.has_value()) {
                             BeatSaver::API::GetBeatmapByUserIdAsync(User.value().GetId(), DownloadSongsSearchViewController::searchPage,
-                                [this, currentSearchIndex](std::optional<BeatSaver::Page> page) {
+                                [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<BeatSaver::Page> page) {
                                     BSML::MainThreadScheduler::Schedule(
-                                        [this, currentSearchIndex, page]() {
-                                            if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                                        [this, currentSearchIndex, page, owner]() {
+                                            if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                                                 if (page.has_value() && !page.value().GetDocs().empty()) {
                                                     auto maps = page.value().GetDocs();
                                                     auto mapsSize = maps.size();
@@ -293,7 +284,7 @@ void DownloadSongsSearchViewController::SearchUser(int currentSearchIndex) {
                                                         mapIndex++;
                                                     }
                                                 } else {
-                                                    if (!BeatSaver::API::exception.empty() && BeatSaver::API::exception != "Not Found") loadingControl->ShowText(BeatSaver::API::exception, true);
+                                                    if (!BeatSaver::API::GetException().empty() && BeatSaver::API::GetException() != "Not Found") loadingControl->ShowText(BeatSaver::API::GetException(), true);
                                                     else loadingControl->ShowText("No Songs Found for given User!", true);
                                                 }
                                             }
@@ -302,7 +293,7 @@ void DownloadSongsSearchViewController::SearchUser(int currentSearchIndex) {
                                 }
                             );
                         } else {
-                            if (!BeatSaver::API::exception.empty() && BeatSaver::API::exception != "Not Found") loadingControl->ShowText(BeatSaver::API::exception, true);
+                            if (!BeatSaver::API::GetException().empty() && BeatSaver::API::GetException() != "Not Found") loadingControl->ShowText(BeatSaver::API::GetException(), true);
                             else loadingControl->ShowText("No User Found!", true);
                         }
                     }
@@ -316,11 +307,11 @@ void DownloadSongsSearchViewController::SearchUser(int currentSearchIndex) {
 void DownloadSongsSearchViewController::GetTrending(int currentSearchIndex) {
     ScoreSaber::API::SearchAsync(DownloadSongsSearchViewController::SearchQuery, ScoreSaber::API::ListCategory::TopRanked,
     //ScoreSaber::API::GetTrendingAsync(
-        [this, currentSearchIndex](std::optional<ScoreSaber::Leaderboards> page) {
+        [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<ScoreSaber::Leaderboards> page) {
             if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                 BSML::MainThreadScheduler::Schedule(
-                    [this, currentSearchIndex, page] {
-                        if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                    [this, currentSearchIndex, page, owner] {
+                        if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                             if (page.has_value() && !page.value().GetLeaderboards().empty()) {
                                 auto songs = page.value().GetLeaderboards();
                                 auto songsSize = songs.size();
@@ -339,7 +330,7 @@ void DownloadSongsSearchViewController::GetTrending(int currentSearchIndex) {
                                 }
                             }
                             else {
-                                if (!ScoreSaber::API::exception.empty()) loadingControl->ShowText(ScoreSaber::API::exception, true);
+                                if (!ScoreSaber::API::GetException().empty()) loadingControl->ShowText(ScoreSaber::API::GetException(), true);
                                 else if (DownloadSongsSearchViewController::SearchQuery.empty()) loadingControl->ShowText("No Results,\nis your Internet working?", true);
                                 else loadingControl->ShowText("No Songs Found!", true);
                             }
@@ -354,11 +345,11 @@ void DownloadSongsSearchViewController::GetTrending(int currentSearchIndex) {
 void DownloadSongsSearchViewController::GetLatestRanked(int currentSearchIndex) {
     ScoreSaber::API::SearchAsync(DownloadSongsSearchViewController::SearchQuery, ScoreSaber::API::ListCategory::LatestRanked,
     //ScoreSaber::API::SearchSSAsync(DownloadSongsSearchViewController::SearchQuery, ScoreSaber::API::SearchType::LatestRanked,
-        [this, currentSearchIndex](std::optional<ScoreSaber::Leaderboards> page) {
+        [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<ScoreSaber::Leaderboards> page) {
             if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                 BSML::MainThreadScheduler::Schedule(
-                    [this, currentSearchIndex, page] {
-                        if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                    [this, currentSearchIndex, page, owner] {
+                        if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                             if (page.has_value() && !page.value().GetLeaderboards().empty()) {
                                 auto songs = page.value().GetLeaderboards();
                                 auto songsSize = songs.size();
@@ -377,7 +368,7 @@ void DownloadSongsSearchViewController::GetLatestRanked(int currentSearchIndex) 
                                 }
                             }
                             else {
-                                if (!ScoreSaber::API::exception.empty()) loadingControl->ShowText(ScoreSaber::API::exception, true);
+                                if (!ScoreSaber::API::GetException().empty()) loadingControl->ShowText(ScoreSaber::API::GetException(), true);
                                 else if (DownloadSongsSearchViewController::SearchQuery.empty()) loadingControl->ShowText("No Results,\nis your Internet working?", true);
                                 else loadingControl->ShowText("No Songs Found!", true);
                             }
@@ -392,11 +383,11 @@ void DownloadSongsSearchViewController::GetLatestRanked(int currentSearchIndex) 
 void DownloadSongsSearchViewController::GetTopPlayed(int currentSearchIndex) {
     ScoreSaber::API::GetListAsync(ScoreSaber::API::ListCategory::TopPlayed, /*)
     ScoreSaber::API::SearchSSAsync(DownloadSongsSearchViewController::SearchQuery, ScoreSaber::API::SearchType::TopPlayed,*/
-        [this, currentSearchIndex](std::optional<ScoreSaber::Leaderboards> page) {
+        [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<ScoreSaber::Leaderboards> page) {
             if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                 BSML::MainThreadScheduler::Schedule(
-                    [this, currentSearchIndex, page] {
-                        if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                    [this, currentSearchIndex, page, owner] {
+                        if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                             if (page.has_value() && !page.value().GetLeaderboards().empty()) {
                                 auto songs = page.value().GetLeaderboards();
                                 auto songsSize = songs.size();
@@ -415,7 +406,7 @@ void DownloadSongsSearchViewController::GetTopPlayed(int currentSearchIndex) {
                                 }
                             }
                             else {
-                                if (!ScoreSaber::API::exception.empty()) loadingControl->ShowText(ScoreSaber::API::exception, true);
+                                if (!ScoreSaber::API::GetException().empty()) loadingControl->ShowText(ScoreSaber::API::GetException(), true);
                                 else if (DownloadSongsSearchViewController::SearchQuery.empty()) loadingControl->ShowText("No Results,\nis your Internet working?", true);
                                 else loadingControl->ShowText("No Songs Found!", true);
                             }
@@ -430,11 +421,11 @@ void DownloadSongsSearchViewController::GetTopPlayed(int currentSearchIndex) {
 void DownloadSongsSearchViewController::GetTopRanked(int currentSearchIndex) {
     ScoreSaber::API::SearchAsync(DownloadSongsSearchViewController::SearchQuery, ScoreSaber::API::ListCategory::TopRanked,
     //ScoreSaber::API::SearchSSAsync(DownloadSongsSearchViewController::SearchQuery, ScoreSaber::API::SearchType::TopRanked,
-        [this, currentSearchIndex](std::optional<ScoreSaber::Leaderboards> page) {
+        [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(this)](std::optional<ScoreSaber::Leaderboards> page) {
             if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                 BSML::MainThreadScheduler::Schedule(
-                    [this, currentSearchIndex, page] {
-                        if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+                    [this, currentSearchIndex, page, owner] {
+                        if (owner && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                             if (page.has_value() && !page.value().GetLeaderboards().empty()) {
                                 auto songs = page.value().GetLeaderboards();
                                 auto songsSize = songs.size();
@@ -453,7 +444,7 @@ void DownloadSongsSearchViewController::GetTopRanked(int currentSearchIndex) {
                                 }
                             }
                             else {
-                                if (!ScoreSaber::API::exception.empty()) loadingControl->ShowText(ScoreSaber::API::exception, true);
+                                if (!ScoreSaber::API::GetException().empty()) loadingControl->ShowText(ScoreSaber::API::GetException(), true);
                                 else if (DownloadSongsSearchViewController::SearchQuery.empty()) loadingControl->ShowText("No Results,\nis your Internet working?", true);
                                 else loadingControl->ShowText("No Songs Found!", true);
                             }
@@ -519,6 +510,7 @@ void DownloadSongsSearchViewController::SetPage(int page) {
 
 void DownloadSongsSearchViewController::DidActivate(bool firstActivation, bool addedToHierarchy, bool screenSystemEnabling) {
     if (firstActivation) {
+        ++searchIndex;
         searchViewController = this;
         get_gameObject()->AddComponent<Touchable*>();
 

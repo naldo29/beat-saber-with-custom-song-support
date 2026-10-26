@@ -1,8 +1,6 @@
-diff --git a/include/log.h b/include/log.h
-index 2c633e8..b7ddfbd 100644
 --- a/include/log.h
 +++ b/include/log.h
-@@ -8,7 +8,18 @@
+@@ -8,7 +8,23 @@
  #define MOD_VERSION "0.1.0"
  #endif
  
@@ -12,8 +10,13 @@ index 2c633e8..b7ddfbd 100644
 +#include <cstdio>
 +#define SL2_APPLE_LOG(lvl, str, ...) \
 +  fmt::print(stderr, "[scotland2:{}] " str "\n", lvl __VA_OPT__(, __VA_ARGS__))
++#if !defined(SC2_DIAGNOSTICS) || SC2_DIAGNOSTICS
 +#define LOG_VERBOSE(...) SL2_APPLE_LOG("verbose", __VA_ARGS__)
 +#define LOG_DEBUG(...) SL2_APPLE_LOG("debug", __VA_ARGS__)
++#else
++#define LOG_VERBOSE(...) do { if (false) SL2_APPLE_LOG("verbose", __VA_ARGS__); } while (false)
++#define LOG_DEBUG(...) do { if (false) SL2_APPLE_LOG("debug", __VA_ARGS__); } while (false)
++#endif
 +#define LOG_INFO(...) SL2_APPLE_LOG("info", __VA_ARGS__)
 +#define LOG_WARN(...) SL2_APPLE_LOG("warn", __VA_ARGS__)
 +#define LOG_ERROR(...) SL2_APPLE_LOG("error", __VA_ARGS__)
@@ -22,11 +25,9 @@ index 2c633e8..b7ddfbd 100644
  #include <android/log.h>
  #include <fmt/compile.h>
  #include <fmt/core.h>
-diff --git a/shared/loader.hpp b/shared/loader.hpp
-index 16ff06c..778339a 100644
 --- a/shared/loader.hpp
 +++ b/shared/loader.hpp
-@@ -371,7 +371,7 @@ struct fmt::formatter<modloader::ModInfo> {
+@@ -371,7 +371,7 @@
    }
  
    template <typename FormatContext>
@@ -35,8 +36,6 @@ index 16ff06c..778339a 100644
      return fmt::format_to(ctx.out(), "id: {} version: {} version tag: {}", info.id, info.version, info.versionLong);
    }
  };
-diff --git a/shared/modloader.h b/shared/modloader.h
-index 400bbc0..5a3352a 100644
 --- a/shared/modloader.h
 +++ b/shared/modloader.h
 @@ -2,7 +2,12 @@
@@ -52,15 +51,13 @@ index 400bbc0..5a3352a 100644
  #include <stdint.h>
  #include "_config.h"
  
-@@ -149,4 +154,4 @@ MODLOADER_FUNC bool modloader_add_ld_library_path(char const* path);
+@@ -149,4 +154,4 @@
  // - CAPI will need more effort here, we need to copy over
  // TODO: Add void** param to setup call, store as userdata in a given mod structure
  
 -/*NOLINTEND(modernize-use-using)*/
 \ No newline at end of file
 +/*NOLINTEND(modernize-use-using)*/
-diff --git a/src/loader.cpp b/src/loader.cpp
-index 4dd50a9..54956cd 100644
 --- a/src/loader.cpp
 +++ b/src/loader.cpp
 @@ -6,7 +6,9 @@
@@ -91,7 +88,7 @@ index 4dd50a9..54956cd 100644
  namespace modloader {
  
  using namespace elf_utils;
-@@ -70,6 +83,21 @@ std::vector<DependencyResult> SharedObject::getToLoad(
+@@ -70,6 +83,21 @@
      return depIt->second;
    }
  
@@ -113,7 +110,7 @@ index 4dd50a9..54956cd 100644
    // TODO: RAII-ify this
    int fd = open64(path.c_str(), O_RDONLY | O_CLOEXEC);
    if (fd == -1) {
-@@ -191,6 +219,7 @@ std::vector<DependencyResult> SharedObject::getToLoad(
+@@ -191,6 +219,7 @@
    LOG_DEBUG("Found a total of: {} dependencies successfully for: {}", dependencies.size(), path.c_str());
  
    return dependencies;
@@ -121,7 +118,7 @@ index 4dd50a9..54956cd 100644
  }
  
  std::optional<std::string> LoadedMod::close() const noexcept {
-@@ -365,6 +394,14 @@ std::optional<T> getFunction(void* handle, std::string_view name, std::filesyste
+@@ -365,6 +394,14 @@
  
    LOG_DEBUG("Got function from handle {} with name: {}, addr: {}", handle, name.data(), fmt::ptr(ptr));
  
@@ -136,7 +133,7 @@ index 4dd50a9..54956cd 100644
    Dl_info info;
    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
    if (dladdr(reinterpret_cast<void* const>(ptr), &info)) {
-@@ -383,6 +420,7 @@ std::optional<T> getFunction(void* handle, std::string_view name, std::filesyste
+@@ -383,6 +420,7 @@
      return std::nullopt;
    }
  
@@ -144,8 +141,6 @@ index 4dd50a9..54956cd 100644
    return ptr;
  }
  
-diff --git a/src/modloader.cpp b/src/modloader.cpp
-index a42f6dc..51ee18e 100644
 --- a/src/modloader.cpp
 +++ b/src/modloader.cpp
 @@ -5,7 +5,9 @@
@@ -158,7 +153,7 @@ index a42f6dc..51ee18e 100644
  #include <sys/stat.h>
  #include <filesystem>
  #include <system_error>
-@@ -85,7 +87,7 @@ void statdump(std::filesystem::path const& path) {
+@@ -85,7 +87,7 @@
    }
  }
  #else

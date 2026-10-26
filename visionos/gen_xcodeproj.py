@@ -59,6 +59,8 @@ TEST_BUILD = (os.environ.get("KLEPTON_TEST_BUILD", "").strip().lower() in ("1", 
               or bool(os.environ.get("KLEPTON_DISPLAY_OVERRIDE", "").strip())
               or _bundle_test
               or "KL_TEST_BUILD" in re.split(r"[,\s]+", os.environ.get("KLEPTON_TEST_ON", "")))
+if os.environ.get("SC2_BUILD_MODE") == "release":
+    TEST_BUILD = False
 if TEST_BUILD:
     print("gen_xcodeproj: test build (KLTestBuild=1): tester-only controls are in it", file=sys.stderr)
 
@@ -195,11 +197,17 @@ if SC2:
         SC2 += ['SC2_libplaylistcore','SC2_libsongdownloader']
     if os.environ.get('SC2_TEST_SET') == 'coremods':
         SC2 += ['SC2_libdatakeeper','SC2_libunicode']
-    if KLT['name'] != 'beatsaber140' or os.environ.get('KLEPTON_BUNDLE_ID') != 'dev.klepton.beatsaber140.scotland2.test':
-        raise SystemExit('Scotland2 is restricted to the existing separate test app bundle identifier.')
+    if KLT['name'] != 'beatsaber140' or not os.environ.get('KLEPTON_BUNDLE_ID'):
+        raise SystemExit('Scotland2 requires beatsaber140 and an explicit recipient bundle ID.')
+    if os.environ.get('SC2_BUILD_MODE') == 'release':
+        import json as _sc2_json
+        with open(os.path.join(HERE, '../ports/scotland2/selected-mods.json')) as _sc2_file:
+            _sc2_selection = _sc2_json.load(_sc2_file)
+        SC2 = ['Scotland2Core', 'SC2_libcxx_shared'] + [
+            'SC2_' + os.path.basename(path)[:-3] for path in _sc2_selection['metadata']]
     for name in SC2:
         if not os.path.isdir(os.path.join(HERE, 'Frameworks', name + '.xcframework')):
-            raise SystemExit('Run bash ports/scotland2/package.sh xros before generating the Scotland2 app.')
+            raise SystemExit('Use ports/scotland2/tools/build_release.py to stage the selected release.' if os.environ.get('SC2_BUILD_MODE')=='release' else 'Run bash ports/scotland2/package.sh xros before generating the diagnostic app.')
 EMBED = GUEST + ANGLE + MVK + SC2
 
 
@@ -501,7 +509,7 @@ SWIFT = ["KleptonApp.swift", "KleptonCompositor.swift", "KleptonControllers.swif
          "KleptonLauncher.swift", "KleptonHL1.swift", "KleptonGameData.swift",
          "KleptonAlyx.swift", "KleptonText.swift", "KleptonSteamCloud.swift",
          "KleptonBackup.swift", "KleptonMetrics.swift", "KleptonPinch.swift",
-         "KleptonTestBuild.swift",
+         "KleptonTestBuild.swift", "KleptonLogTail.swift",
          "KleptonArrayViews.swift",
          "KleptonControllerInput.swift", "KleptonControllerMode.swift",
          "KleptonSurrealInput.swift", "KleptonSurrealBackend.swift", "KleptonSurrealView.swift",
@@ -598,7 +606,11 @@ APP_VERSION = _plist_version("KLEPTON_APP_VERSION", "1.0")
 APP_BUILD = _plist_version("KLEPTON_APP_BUILD", "1")
 
 COMMON = f"""
+                KL_ALLOW_TEST_SWITCHES = "{0 if os.environ.get('SC2_BUILD_MODE')=='release' else 1}";
                 KL_SCOTLAND2_TEST = "{1 if SC2 else 0}";
+                ENABLE_DEBUG_DYLIB = "{"NO" if os.environ.get('SC2_BUILD_MODE')=='release' else "YES"}";
+                ENABLE_PREVIEWS = "{"NO" if os.environ.get('SC2_BUILD_MODE')=='release' else "YES"}";
+                KL_SCOTLAND2_DIAGNOSTICS = "{0 if os.environ.get('SC2_BUILD_MODE')=='release' else 1}";
                 KL_SCOTLAND2_CUSTOMTYPES = "{1 if SC2 and os.environ.get('SC2_TEST_SET')=='customtypes' else 0}";
                 KL_SCOTLAND2_METACORE = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('metacore','songdownloader','coremods') else 0}";
                 KL_SCOTLAND2_SONGDOWNLOADER = "{1 if SC2 and os.environ.get('SC2_TEST_SET') in ('songdownloader','coremods') else 0}";
@@ -673,7 +685,7 @@ COMMON = f"""
 				// second target needed one. The failure is a link error naming
 				// VTDecompressionSession*, which reads as a missing SDK rather
 				// than as a build setting that was never updated.
-				OTHER_LDFLAGS = "-lz -lc++ -framework AudioToolbox -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface -framework CoreText -framework CoreGraphics";
+				OTHER_LDFLAGS = "-lz -lc++ -framework AudioToolbox -framework VideoToolbox -framework CoreMedia -framework CoreVideo -framework IOSurface{' -framework CoreText -framework CoreGraphics' if SC2 else ''}";
 				PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE_ID};
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = xros;

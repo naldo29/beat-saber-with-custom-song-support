@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "source": "Retained generic runtime rows from pinned Klepton base 0333512150a91a9ac83ceeae6e89c2d9ddc44eb3",
+  "targets": {
+    "x10048506838538799": {
+      "name": "x10048506838538799",
+      "tree": "x10048506838538799",
+      "apk": "x10048506838538799.apk",
+      "assets": "x10048506838538799/assets",
+      "srcdir": "x10048506838538799/lib/arm64-v8a",
+      "entry": "libmain",
+      "userdata": "x10048506838538799",
+      "obb": "obb",
+      "kind": "unity"
+    },
+    "x2637179839719680": {
+      "name": "x2637179839719680",
+      "tree": "x2637179839719680",
+      "apk": "x2637179839719680.apk",
+      "assets": "x2637179839719680/assets",
+      "srcdir": "x2637179839719680/lib/arm64-v8a",
+      "entry": "libUE4",
+      "userdata": "x2637179839719680",
+      "obb": "Android/obb/com.Armature.VR4",
+      "kind": "ue4"
+    },
+    "x7527722310622065": {
+      "name": "x7527722310622065",
+      "tree": "x7527722310622065",
+      "apk": "x7527722310622065.apk",
+      "assets": "x7527722310622065/assets",
+      "srcdir": "x7527722310622065/lib/arm64-v8a",
+      "entry": "libmain",
+      "userdata": "x7527722310622065",
+      "obb": "Android/obb/com.rrrgames.CaveCrave",
+      "kind": "unity"
+    },
+    "x9531494193591052": {
+      "name": "x9531494193591052",
+      "tree": "x9531494193591052",
+      "apk": "x9531494193591052.apk",
+      "assets": "x9531494193591052/assets",
+      "srcdir": "x9531494193591052/lib/arm64-v8a",
+      "entry": "libmain",
+      "userdata": "x9531494193591052",
+      "obb": "Android/obb/com.FireproofStudios.GhostTown",
+      "kind": "unity"
+    }
+  }
+}

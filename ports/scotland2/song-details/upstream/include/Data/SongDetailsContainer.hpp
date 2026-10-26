@@ -37,6 +37,9 @@ namespace SongDetailsCache {
             SongHash(const std::string& str);
             bool operator ==(const SongHash& other) const noexcept { return c1 == other.c1 && c2 == other.c2 && c3 == other.c3; }
         private:
+#if SC2_DIAGNOSTICS
+            friend struct Sc2BoundaryTests;
+#endif
             SongHash();
             friend class SongDetailsContainer;
             friend class HexUtil;
@@ -48,6 +51,9 @@ namespace SongDetailsCache {
         public:
             static std::future<void> Load(bool reload = false, int acceptableAgeHours = 1);
         private:
+#if SC2_DIAGNOSTICS
+            friend struct Sc2BoundaryTests;
+#endif
             friend struct Song;
             friend struct SongDifficulty;
             friend struct SongHash;

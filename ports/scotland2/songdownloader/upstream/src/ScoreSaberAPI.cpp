@@ -1,6 +1,8 @@
 #include "ScoreSaberAPI.hpp"
 
 #include "CustomLogger.hpp"
+#include <mutex>
+#include <memory>
 
 #include "Utils/WebUtils.hpp"
 #include "Utils/FileUtils.hpp"
@@ -22,9 +24,18 @@ namespace ScoreSaber::API {
     // TODO: Add search option
 
     std::string exception;
+    static std::mutex exceptionMutex;
+    static void SetException(std::string value) {
+        std::lock_guard<std::mutex> lock(exceptionMutex);
+        exception = std::move(value);
+    }
+    std::string GetException() {
+        std::lock_guard<std::mutex> lock(exceptionMutex);
+        return exception;
+    }
 
     std::optional<ScoreSaber::Page> GetTrending(bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         auto json = WebUtils::GetJSON(fmt::format(API_URL_DEPRECATED "&cat=0&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)));
         if (!json.has_value())
             return std::nullopt;
@@ -35,13 +46,13 @@ namespace ScoreSaber::API {
         }
         catch (const std::exception& e) {
             LOG_ERROR("{}", e.what());
-            exception = e.what();
+            SetException(e.what());
             return std::nullopt;
         }
     }
 
     std::optional<ScoreSaber::Page> GetLatestRanked(bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         auto json = WebUtils::GetJSON(fmt::format(API_URL_DEPRECATED "&cat=1&limit={}&page={}&ranke={}", amount, ++pageIndex, int(ranked)));
         if (!json.has_value())
             return std::nullopt;
@@ -52,13 +63,13 @@ namespace ScoreSaber::API {
         }
         catch (const std::exception& e) {
             LOG_ERROR("{}", e.what());
-            exception = e.what();
+            SetException(e.what());
             return std::nullopt;
         }
     }
 
     std::optional<ScoreSaber::Page> GetTopPlayed(bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         auto json = WebUtils::GetJSON(fmt::format(API_URL_DEPRECATED "&cat=2&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)));
         if (!json.has_value())
             return std::nullopt;
@@ -69,13 +80,13 @@ namespace ScoreSaber::API {
         }
         catch (const std::exception& e) {
             LOG_ERROR("{}", e.what());
-            exception = e.what();
+            SetException(e.what());
             return std::nullopt;
         }
     }
 
     std::optional<ScoreSaber::Page> GetTopRanked(bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         auto json = WebUtils::GetJSON(fmt::format(API_URL_DEPRECATED "&cat=3&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)));
         if (!json.has_value())
             return std::nullopt;
@@ -86,13 +97,13 @@ namespace ScoreSaber::API {
         }
         catch (const std::exception& e) {
             LOG_ERROR("{}", e.what());
-            exception = e.what();
+            SetException(e.what());
             return std::nullopt;
         }
     }
 
     std::optional<ScoreSaber::Leaderboards> GetList(ListCategory list, std::optional<bool> ranked, std::optional<bool> qualified, std::optional<bool> unique, int pageIndex) {
-        exception.clear();
+        SetException({});
         std::stringstream requeststream;
         requeststream << API_LEADERBOARD;
         requeststream << fmt::format("?category={}", static_cast<int>(list));
@@ -106,7 +117,7 @@ namespace ScoreSaber::API {
         if (!json.has_value())
             return std::nullopt;
         if (json.value().HasMember("errorMessage") && json.value()["errorMessage"].IsString()) {
-            if (strcmp(json.value()["errorMessage"].GetString(), "Not Found") != 0) exception = json.value()["errorMessage"].GetString();
+            if (strcmp(json.value()["errorMessage"].GetString(), "Not Found") != 0) SetException(json.value()["errorMessage"].GetString());
             return std::nullopt;
         }
         try {
@@ -116,7 +127,7 @@ namespace ScoreSaber::API {
         }
         catch (const std::exception& e) {
             LOG_ERROR("{}", e.what());
-            exception = e.what();
+            SetException(e.what());
             return std::nullopt;
         }
     }
@@ -139,7 +150,7 @@ namespace ScoreSaber::API {
     }
 
     void GetTrendingAsync(std::function<void(std::optional<ScoreSaber::Page>)> finished, bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         WebUtils::GetJSONAsync(fmt::format(API_URL_DEPRECATED "&cat=0&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)),
             [finished](long httpCode, bool error, rapidjson::Document& document) {
                 if (error) {
@@ -153,7 +164,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         //// Convert the document into a string and log/write to file for debug purposes
                         //rapidjson::StringBuffer buffer;
@@ -167,7 +178,7 @@ namespace ScoreSaber::API {
     }
 
     void GetLatestRankedAsync(std::function<void(std::optional<ScoreSaber::Page>)> finished, bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         WebUtils::GetJSONAsync(fmt::format(API_URL_DEPRECATED "&cat=1&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)),
             [finished](long httpCode, bool error, rapidjson::Document& document) {
                 if (error) {
@@ -181,7 +192,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         //// Convert the document into a string and log/write to file for debug purposes
                         //rapidjson::StringBuffer buffer;
@@ -195,7 +206,7 @@ namespace ScoreSaber::API {
     }
 
     void GetTopPlayedAsync(std::function<void(std::optional<ScoreSaber::Page>)> finished, bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         WebUtils::GetJSONAsync(fmt::format(API_URL_DEPRECATED "&cat=2&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)),
             [finished](long httpCode, bool error, rapidjson::Document& document) {
                 if (error) {
@@ -209,7 +220,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         //// Convert the document into a string and log/write to file for debug purposes
                         //rapidjson::StringBuffer buffer;
@@ -223,7 +234,7 @@ namespace ScoreSaber::API {
     }
 
     void GetTopRankedAsync(std::function<void(std::optional<ScoreSaber::Page>)> finished, bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         WebUtils::GetJSONAsync(fmt::format(API_URL_DEPRECATED "&cat=3&limit={}&page={}&ranked={}", amount, ++pageIndex, int(ranked)),
             [finished](long httpCode, bool error, rapidjson::Document& document) {
                 if (error) {
@@ -237,7 +248,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         //// Convert the document into a string and log/write to file for debug purposes
                         //rapidjson::StringBuffer buffer;
@@ -251,7 +262,7 @@ namespace ScoreSaber::API {
     }
 
     void GetListAsync(ListCategory list, std::function<void(std::optional<ScoreSaber::Leaderboards>)> finished, std::optional<bool> ranked, std::optional<bool> qualified, std::optional<bool> unique, int pageIndex) {
-        exception.clear();
+        SetException({});
         std::stringstream requeststream;
         requeststream << API_LEADERBOARD;
         requeststream << fmt::format("?category={}", static_cast<int>(list));
@@ -267,7 +278,7 @@ namespace ScoreSaber::API {
                     finished(std::nullopt);
                 }
                 else if (document.IsObject() && document.HasMember("errorMessage") && document["errorMessage"].IsString()) {
-                    if (strcmp(document["errorMessage"].GetString(), "Not Found") != 0) exception = document["errorMessage"].GetString();
+                    if (strcmp(document["errorMessage"].GetString(), "Not Found") != 0) SetException(document["errorMessage"].GetString());
                     finished(std::nullopt);
                 }
                 else {
@@ -278,7 +289,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         //// Convert the document into a string and log/write to file for debug purposes
                         //rapidjson::StringBuffer buffer;
@@ -292,7 +303,7 @@ namespace ScoreSaber::API {
     }
 
     void SearchSSAsync(std::string query, SearchType list, std::function<void(std::optional<ScoreSaber::Page>)> finished, bool ranked, int pageIndex, int amount) {
-        exception.clear();
+        SetException({});
         WebUtils::GetJSONAsync(fmt::format(API_URL_DEPRECATED "&cat={}&limit={}&page={}&ranked={}&search={}", static_cast<int>(list), amount, ++pageIndex, int(ranked), query),
             [finished](long httpCode, bool error, rapidjson::Document& document) {
                 if (error) {
@@ -306,7 +317,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         //// Convert the document into a string and log/write to file for debug purposes
                         //rapidjson::StringBuffer buffer;
@@ -320,7 +331,7 @@ namespace ScoreSaber::API {
     }
 
     void SearchAsync(std::string query, ListCategory list, std::function<void(std::optional<ScoreSaber::Leaderboards>)> finished, std::optional<bool> ranked, std::optional<bool> qualified, std::optional<bool> unique, int pageIndex) {
-        exception.clear();
+        SetException({});
         std::stringstream requeststream;
         requeststream << API_LEADERBOARD;
         requeststream << fmt::format("?category={}", static_cast<int>(list));
@@ -337,7 +348,7 @@ namespace ScoreSaber::API {
                     finished(std::nullopt);
                 }
                 else if (document.IsObject() && document.HasMember("errorMessage") && document["errorMessage"].IsString()) {
-                    if (strcmp(document["errorMessage"].GetString(), "Not Found") != 0) exception = document["errorMessage"].GetString();
+                    if (strcmp(document["errorMessage"].GetString(), "Not Found") != 0) SetException(document["errorMessage"].GetString());
                     finished(std::nullopt);
                 }
                 else {
@@ -348,7 +359,7 @@ namespace ScoreSaber::API {
                     }
                     catch (const std::exception& e) {
                         LOG_ERROR("{}", e.what());
-                        exception = e.what();
+                        SetException(e.what());
                         finished(std::nullopt);
                         // Convert the document into a string and log/write to file for debug purposes
                         rapidjson::StringBuffer buffer;

@@ -4,3 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <span>
+
+#ifndef SC2_DIAGNOSTICS
+#define SC2_DIAGNOSTICS 0
+#endif

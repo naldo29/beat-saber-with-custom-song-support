@@ -1280,6 +1280,7 @@ def _add_generic():
     TARGETS[name] = {**_generic_row(name), **STORE_DEFAULTS.get(name, {})}
 
 
+_STATIC_TARGET_NAMES = frozenset(TARGETS)
 _add_generic()
 
 
@@ -1536,8 +1537,12 @@ def c_table():
         "#endif",
         "",
     ]
-    for name in sorted(TARGETS):
-        t = TARGETS[name]
+    import json, os
+    with open(os.path.join(os.path.dirname(__file__), 'runtime-targets.json')) as file:
+        retained = json.load(file)['targets']
+    table = {**retained, **{name: TARGETS[name] for name in _STATIC_TARGET_NAMES}}
+    for name in sorted(table):
+        t = table[name]
         kind = "KL_GUEST_" + t["kind"].upper()
         # `userdata` defaults to the row name — one profile per target is the
         # rule, and a row only states it to KEEP a directory a previous naming

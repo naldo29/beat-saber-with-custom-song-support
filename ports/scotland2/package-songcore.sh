@@ -1,6 +1,10 @@
 #!/bin/bash
 # Actual SongCore in Scotland2's original late phase, with the actual dependencies.
 set -euo pipefail
+if [ "${SC2_BUILD_MODE:-diagnostic}" = release ]; then
+  echo 'This progressive helper is diagnostic only. Use ports/scotland2/tools/build_release.py for the selected release.' >&2
+  exit 2
+fi
 cd "$(dirname "$0")/../.."
 PLATFORM="${1:-xros}"
 case "$PLATFORM" in xros) KLPLATFORM=visionos;MINOS=26.0 ;; macosx) KLPLATFORM=macos;MINOS=14.0 ;; *) exit 2 ;; esac

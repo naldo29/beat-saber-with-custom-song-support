@@ -15,7 +15,8 @@ for name in ['kaleb','gif-lib','tinyxml2']:
     if not link.exists():link.symlink_to(target,target_is_directory=True)
     assert link.resolve()==target.resolve()
 for row in json.loads((dep/'bsml-submodules-lock.json').read_text()):
-    name=row['directory'];link=src/'include/submodules'/name;target=dep/name
+    name=row['directory'];link=out/'include/submodules'/name;target=dep/name
+    link.parent.mkdir(parents=True,exist_ok=True)
     if link.is_dir() and not link.is_symlink() and not any(link.iterdir()):link.rmdir()
     if not link.exists():link.symlink_to(target,target_is_directory=True)
     assert link.resolve()==target.resolve()
@@ -24,7 +25,7 @@ for row in json.loads((dep/'bsml-submodules-lock.json').read_text()):
 for row in json.loads((dep/'bsml-extra-lock.json').read_text()):
     assert hashlib.sha256((dep/row['archive']).read_bytes()).hexdigest()==row['sha256']
 (out/'git_info.h').write_text('#pragma once\n#define GIT_USER "Scotland2 port"\n#define GIT_BRANCH "v0.4.55"\n#define GIT_COMMIT 0x4987a88\n#define GIT_MODIFIED 1\n')
-includes=[out,src,src/'src',src/'include',src/'shared',sdk,dep/'bs-cordl/include',
+includes=[out,out/'include',src,src/'src',src/'include',src/'shared',sdk,dep/'bs-cordl/include',
     il2cpp/'libil2cpp',il2cpp/'external/baselib/Include',il2cpp/'external/baselib/Platforms/Android/Include',
     dep/'fmt/include',dep/'utfcpp/source',dep/'css-color-parser-cpp',dep/'EasyGifReader',
     dep/'cppcodec',dep/'gif-lib/shared',dep/'gif-lib/include',dep/'gif-lib/src']
@@ -35,6 +36,9 @@ flags=['-std=c++20','-O1','-gline-tables-only','-fPIC','-frtti','-fexceptions','
     '-DVERSION="0.4.55"','-DMOD_ID="bsml"','-DMAKE_DOCS=0',
     '-Wno-invalid-offsetof','-Wno-extra-qualification',
     '-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [arg for p in includes for arg in ['-I',str(p)]]
 sources=sorted((src/'src').rglob('*.cpp'))+[dep/'css-color-parser-cpp/csscolorparser.cpp',dep/'EasyGifReader/EasyGifReader.cpp']
 digest=hashlib.sha256(json.dumps(flags).encode())
@@ -75,7 +79,7 @@ for asset in sorted((src/'assets').rglob('*')):
     if not asset.is_file():continue
     name='_binary_'+re.sub(r'[^a-zA-Z0-9_]','_',str(asset.relative_to(src/'assets')))
     asm += ['.balign 8','.global '+name+'_start','.global '+name+'_end',name+'_start:',
-        '.space 32,32','.incbin "'+str(asset)+'"','.byte 32',name+'_end:']
+        '.space 32,32','.incbin '+json.dumps(str(asset)),'.byte 32',name+'_end:']
 (out/'assets.S').write_text('\n'.join(asm)+'\n')
 subprocess.run([str(c),'-c',str(out/'assets.S'),'-o',str(out/'assets.o')],check=True)
 gif_objects=[]

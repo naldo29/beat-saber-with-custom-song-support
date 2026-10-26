@@ -28,6 +28,7 @@ const ScoreSaber::Leaderboard& SearchEntry::GetSongScoreSaber() {
 #pragma region SetBeatmap
 
 void SearchEntry::SetBeatmap(const BeatSaver::Beatmap& _map) {
+    if (_map.GetVersions().empty()) { Disable(); return; }
     map = _map;
     gameObject->SetActive(true);
     MapType = SearchEntry::MapType::BeatSaver;
@@ -66,10 +67,10 @@ void SearchEntry::SetBeatmap(const BeatSaver::Beatmap& _map) {
     int currentSearchIndex = DownloadSongsSearchViewController::searchIndex;
 
     coverImageView->set_enabled(false);
-    BeatSaver::API::GetCoverImageAsync(map, [this, currentSearchIndex](std::vector<uint8_t> bytes) {
+    BeatSaver::API::GetCoverImageAsync(map, [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(searchViewController)](std::vector<uint8_t> bytes) {
         if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
-            BSML::MainThreadScheduler::Schedule([this, currentSearchIndex, bytes] {
-                if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+            BSML::MainThreadScheduler::Schedule([this, currentSearchIndex, bytes, owner] {
+                if (owner && !bytes.empty() && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                     std::vector<uint8_t> data = bytes;
 
                     ArrayW<uint8_t> spriteArray(data);
@@ -102,10 +103,10 @@ void SearchEntry::SetBeatmap(const BeatSaver::Beatmap& _map) {
 //    int currentSearchIndex = DownloadSongsSearchViewController::searchIndex;
 //
 //    coverImageView->set_enabled(false);
-//    ScoreSaber::API::GetCoverImageAsync(SSsong, [this, currentSearchIndex](std::vector<uint8_t> bytes) {
+//    ScoreSaber::API::GetCoverImageAsync(SSsong, [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(searchViewController)](std::vector<uint8_t> bytes) {
 //        if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
-//            MainThreadScheduler::Schedule([this, currentSearchIndex, bytes] {
-//                if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+//            MainThreadScheduler::Schedule([this, currentSearchIndex, bytes, owner] {
+//                if (owner && !bytes.empty() && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
 //                    std::vector<uint8_t> data = bytes;
 //
 //                    Array<uint8_t>* spriteArray = il2cpp_utils::vectorToArray(data);
@@ -141,10 +142,10 @@ void SearchEntry::SetBeatmap(const ScoreSaber::Leaderboard& _song) {
     int currentSearchIndex = DownloadSongsSearchViewController::searchIndex;
 
     coverImageView->set_enabled(false);
-    ScoreSaber::API::GetCoverImageAsync(SSsong, [this, currentSearchIndex](std::vector<uint8_t> bytes) {
+    ScoreSaber::API::GetCoverImageAsync(SSsong, [this, currentSearchIndex, owner = SafePtrUnity<DownloadSongsSearchViewController>(searchViewController)](std::vector<uint8_t> bytes) {
         if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
-            BSML::MainThreadScheduler::Schedule([this, currentSearchIndex, bytes] {
-                if (currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
+            BSML::MainThreadScheduler::Schedule([this, currentSearchIndex, bytes, owner] {
+                if (owner && !bytes.empty() && currentSearchIndex == DownloadSongsSearchViewController::searchIndex) {
                     std::vector<uint8_t> data = bytes;
 
                     ArrayW<uint8_t> spriteArray(data);
@@ -163,7 +164,7 @@ void SearchEntry::SetBeatmap(const ScoreSaber::Leaderboard& _song) {
 std::string SearchEntry::GetSongHash() {
     std::string hash;
     if (MapType == SearchEntry::MapType::BeatSaver) {
-        hash = map.GetVersions().front().GetHash();
+        if (!map.GetVersions().empty()) hash = map.GetVersions().front().GetHash();
     }
     else {
         hash = SSsong.GetSongHash();
@@ -187,7 +188,8 @@ void SearchEntry::UpdateDownloadProgress(bool checkLoaded) {
     }
     
     BSML::MainThreadScheduler::Schedule(
-        [this] {
+        [this, owner = SafePtrUnity<DownloadSongsSearchViewController>(searchViewController)] {
+            if (!owner) return;
             // Update the download button text based on the current status
             switch (status)
             {

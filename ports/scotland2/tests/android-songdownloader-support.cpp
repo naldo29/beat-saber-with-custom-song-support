@@ -1,3 +1,4 @@
+#if !defined(SC2_DIAGNOSTICS) || SC2_DIAGNOSTICS
 // Exercise the original browser's own networking code, not a substitute client.
 #include "Utils/WebUtils.hpp"
 #include "BeatSaverAPI.hpp"
@@ -5,6 +6,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#include <future>
+#include <stdexcept>
 #include "CustomTypes/DownloadSongsFlowCoordinator.hpp"
 #include "bsml/shared/BSML/FlowCoordinators/MainMenuHolderFlowCoordinator.hpp"
 extern "C" __attribute__((visibility("default")))
@@ -25,8 +28,12 @@ extern "C" __attribute__((visibility("default")))
 int sc2_test_songdownloader_api() {
     auto page=BeatSaver::API::LatestPaged();
     const auto count=page?page->GetDocs().size():0;
-    std::fprintf(stderr,"[scotland2] SONGDOWNLOADER_API maps=%zu error=%s\n",count,BeatSaver::API::exception.c_str());
+    std::fprintf(stderr,"[scotland2] SONGDOWNLOADER_API maps=%zu error=%s\n",count,BeatSaver::API::GetException().c_str());
     return count?0:1;
+}
+extern "C" __attribute__((visibility("default")))
+int sc2_test_songdownloader_safe_extract(const char* bytes, size_t size, const char* dest) {
+    return zip_stream_extract(bytes, size, dest, nullptr, nullptr);
 }
 extern "C" __attribute__((visibility("default")))
 int sc2_test_songdownloader_zip(const char *path) {
@@ -42,6 +49,12 @@ int sc2_test_songdownloader_zip(const char *path) {
     return valid?0:3;
 }
 extern "C" __attribute__((visibility("default")))
+int sc2_test_songdownloader_callback_safety(const char* url) {
+    auto promise=std::make_shared<std::promise<bool>>();auto result=promise->get_future();
+    WebUtils::GetAsync(url,10,[promise](long status,std::string body){promise->set_value(status==0 && body.empty());},[](float){throw std::runtime_error("isolated callback failure");});
+    return result.get()?0:1;
+}
+extern "C" __attribute__((visibility("default")))
 int sc2_test_songdownloader_late() {
     auto registration=BSML::MainMenuRegistration::get_registration("SongDownloader");
     if(!registration || registration->hoverHint!="More Songs" ||
@@ -53,3 +66,5 @@ int sc2_test_songdownloader_late() {
     }).detach();
     return 0;
 }
+
+#endif

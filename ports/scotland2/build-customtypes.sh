@@ -4,6 +4,14 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 NDK="${ANDROID_NDK_HOME:-$PWD/port-deps/toolchains/android-ndk-r27c}"
 CC="$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android26-clang++"
+REPRO_FLAGS=(-fdebug-compilation-dir=.)
+if [ "${SC2_BUILD_MODE:-diagnostic}" = release ]; then
+  REPRO_FLAGS=("-ffile-prefix-map=$PWD=." "-fmacro-prefix-map=$PWD=." "-ffile-prefix-map=$NDK=/ndk" -fdebug-compilation-dir=.)
+fi
+
+DIAGNOSTIC_FLAGS=(-DSC2_DIAGNOSTICS=0)
+if [ "${SC2_BUILD_MODE:-diagnostic}" != release ]; then DIAGNOSTIC_FLAGS=(-DSC2_DIAGNOSTICS=1 -DCT_USE_GCDESCRIPTOR_DEBUG); fi
+
 OUT="$PWD/build/scotland2/android-customtypes"
 SDK="$PWD/build/scotland2/mod-sdk"
 SRC="$PWD/ports/scotland2/customtypes/upstream"
@@ -37,13 +45,18 @@ python3 ports/scotland2/tools/find_customtypes_targets.py --il2cpp beatsaber140/
  --unity beatsaber140/lib/arm64-v8a/libunity.so --output "$OUT/targets.json"
 python3 - "$OUT" <<'PY'
 from pathlib import Path
-import json,sys
-out=Path(sys.argv[1]);target,=json.loads((out/'targets.json').read_text())['unity']['targets']
+import json,sys,os
+out=Path(sys.argv[1]);profile=json.loads((out/'targets.json').read_text())
+if os.environ.get('SC2_BUILD_MODE')=='release':
+ profile['il2cpp']['targets']=[row for row in profile['il2cpp']['targets'] if not row['name'].startswith('LivenessState_')]
+ profile['excludedDiagnosticHooks']='Three CT_USE_GCDESCRIPTOR_DEBUG liveness tracing hooks'
+ (out/'targets.json').write_text(json.dumps(profile,indent=2)+'\n')
+target,=profile['unity']['targets']
 (out/'sc2-customtypes-target.h').write_text('#define SC2_CUSTOMTYPES_SCRIPTING_CLASS_OFFSET '+target['vaddr']+'\n#define SC2_CUSTOMTYPES_SCRIPTING_CLASS_WORD '+target['expect']+'u\n')
 PY
-"$CC" -std=c++20 -O1 -g -fPIC -fexceptions -frtti -fvisibility=hidden -shared \
+"$CC" "${REPRO_FLAGS[@]}" -std=c++20 -O1 -g -fPIC -fexceptions -frtti -fvisibility=hidden -shared \
  -DVERSION='"0.18.3"' -DMOD_ID='"custom-types"' -DVERSION_LONG=1 \
- -DANDROID -DNEED_UNSAFE_CSHARP -DUNITY_2021 -DNO_VERBOSE_LOGS -DCT_USE_GCDESCRIPTOR_DEBUG \
+ -DANDROID -DNEED_UNSAFE_CSHARP -DUNITY_2021 -DNO_VERBOSE_LOGS "${DIAGNOSTIC_FLAGS[@]}" \
  -DFMT_HEADER_ONLY -fdeclspec -Wno-invalid-offsetof -Wno-extra-qualification \
  -DSC2_AOT_HOOKS -include ports/scotland2/src/android-mod-sdk-prelude.hpp \
  -include "$OUT/sc2-customtypes-target.h" -I"$OUT" \
@@ -58,7 +71,8 @@ PY
  -L"$OUT/deps" -lbeatsaber-hook -lpaper2_scotland2 \
  -llog -Wl,-z,max-page-size=16384 -Wl,--exclude-libs,ALL \
  -Wl,-soname,libcustom-types.so -o "$OUT/libcustom-types.so"
-"$CC" -std=c++20 -O1 -g -fPIC -fvisibility=hidden -shared -DANDROID \
+if [ "${SC2_BUILD_MODE:-diagnostic}" != release ]; then
+"$CC" "${REPRO_FLAGS[@]}" -std=c++20 -O1 -g -fPIC -fvisibility=hidden -shared -DANDROID \
  -DUNITY_2021 -DNEED_UNSAFE_CSHARP -DFMT_HEADER_ONLY -DSC2_AOT_HOOKS -fdeclspec \
  -Wno-invalid-offsetof -Wno-extra-qualification \
  -include ports/scotland2/src/android-mod-sdk-prelude.hpp \
@@ -68,6 +82,7 @@ PY
  ports/scotland2/tests/android-customtypes.cpp -L"$OUT" -lcustom-types \
  -Lbuild/scotland2/android-aot -lsl2_abi -L"$OUT/deps" -lbeatsaber-hook -lpaper2_scotland2 \
  -Wl,-z,max-page-size=16384 -Wl,-soname,libsc2_customtypes_probe.so -o "$OUT/libsc2_customtypes_probe.so"
+fi
 python3 - "$OUT" <<'PY'
 from pathlib import Path
 import hashlib,json,sys
@@ -91,7 +106,7 @@ record={'source':json.loads(Path('ports/scotland2/customtypes/provenance.json').
  'scope':'Actual custom-types source build; original type logic retained, embedded And64 compilation replaced by support DSO import. Not yet registration-tested or packaged.',
  'prelude':'ports/scotland2/src/android-mod-sdk-prelude.hpp',
  'targets':json.loads((out/'targets.json').read_text()),
- 'probeSha256':hashlib.sha256((out/'libsc2_customtypes_probe.so').read_bytes()).hexdigest()}
+ 'probeSha256':hashlib.sha256((out/'libsc2_customtypes_probe.so').read_bytes()).hexdigest() if __import__('os').environ.get('SC2_BUILD_MODE')!='release' else None}
 (out/'provenance.json').write_text(json.dumps(record,indent=2)+'\n')
 PY
 echo "Built actual custom-types with imported source-adapted And64: $OUT"

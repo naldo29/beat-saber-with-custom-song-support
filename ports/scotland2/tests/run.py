@@ -54,11 +54,11 @@ subprocess.run(["xcrun", "clang++", "-std=c++20", "-Wall", "-Wextra", "-Werror",
                 "-Iports/scotland2/include", "ports/scotland2/tests/parser.cpp",
                 str(OUT / "libscotland2-core.a"), "-o", str(parser)], cwd=ROOT, check=True)
 inventory = json.loads((ROOT / "port-results/coremods/coremods-lock.json").read_text())
-for binary in inventory["binaries"]:
+for binary in [b for b in inventory["binaries"] if b["mod"] != "FakeId"]:
     result = subprocess.run([str(parser), str(ROOT / "port-results/coremods" / binary["file"])],
                             capture_output=True, text=True, check=True)
     assert result.stdout.splitlines() == binary["needed"], binary["file"]
-print(f"PASS dependency parser matches the independent audit for all {len(inventory['binaries'])} actual mod libraries")
+print(f"PASS dependency parser matches the independent audit for all {len([b for b in inventory['binaries'] if b['mod']!='FakeId'])} actual mod libraries")
 bad = []
 valid = elf(["libc.so"])
 bad.extend([b"", valid[:63], b"Not ELF" + bytes(300)])

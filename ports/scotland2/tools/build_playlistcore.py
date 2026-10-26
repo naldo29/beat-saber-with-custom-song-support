@@ -21,6 +21,9 @@ flags=['-std=c++20','-O1','-gline-tables-only','-fPIC','-frtti','-fexceptions','
     '-DANDROID','-DUNITY_2021','-DHAS_CODEGEN','-DNEED_UNSAFE_CSHARP','-DFMT_HEADER_ONLY','-DSC2_AOT_HOOKS',
     '-DVERSION="1.5.5"','-DVERSION_LONG=0','-DMOD_ID="playlistcore"','-Wno-invalid-offsetof','-Wno-extra-qualification',
     '-include',str(ROOT/'ports/scotland2/src/android-mod-sdk-prelude.hpp')]
+from build_flags import reproducible_flags
+flags += reproducible_flags(ROOT,ndk)
+flags.append('-DSC2_DIAGNOSTICS='+('0' if os.environ.get('SC2_BUILD_MODE')=='release' else '1'))
 flags += [arg for path in includes for arg in ['-I',str(path)]]
 sources=sorted((src/'src').rglob('*.cpp'))
 # Hash the working mod and port adapters. Pinned SDK archives are recorded in
@@ -62,7 +65,7 @@ asm=['.section .data.sc2_assets,"aw",@progbits']
 for asset in sorted((src/'assets').rglob('*')):
     if not asset.is_file():continue
     name='_binary_'+re.sub(r'[^a-zA-Z0-9_]','_',str(asset.relative_to(src/'assets')))
-    asm += ['.p2align 4','.global '+name+'_start',name+'_start:','.fill 32,1,32','.incbin "'+str(asset)+'"','.byte 32','.global '+name+'_end',name+'_end:']
+    asm += ['.p2align 4','.global '+name+'_start',name+'_start:','.fill 32,1,32','.incbin '+json.dumps(str(asset)),'.byte 32','.global '+name+'_end',name+'_end:']
 asm += ['.section .note.GNU-stack,"",%progbits']
 (out/'assets.S').write_text('\n'.join(asm)+'\n')
 subprocess.run([str(cc),'-c',str(out/'assets.S'),'-o',str(out/'assets.o')],check=True)

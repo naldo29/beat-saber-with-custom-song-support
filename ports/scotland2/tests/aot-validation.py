@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 import subprocess
 import tempfile
+import sys
 
 ROOT=Path(__file__).resolve().parents[3]
 spec=importlib.util.spec_from_file_location('prepare_hooks',ROOT/'ports/scotland2/tools/prepare_hooks.py')
@@ -92,5 +93,19 @@ for name,offset,fmt,value,message in faults:
         text=result.stdout+result.stderr;(folder/(name+'.log')).write_text(text)
         assert result.returncode==1 and message in text,(name,result.returncode,text)
         seen.append('signed-metadata-'+name)
+# CLI output/report aliases must be rejected without modifying any input.
+for kind in ['output-input-alias','report-input-alias','report-symlink']:
+    with tempfile.TemporaryDirectory(prefix='sc2-aot-alias-') as tmp:
+        tmp=Path(tmp);e=tmp/'fixture.so';m=tmp/'unprepared.dylib';record=tmp/'record.json';output=tmp/'output.dylib'
+        e.write_bytes(elf);m.write_bytes(macho);record.write_text(json.dumps(manifest))
+        if kind=='output-input-alias':output=m
+        if kind=='report-input-alias':record=tmp/'output.hooks.json';record.write_text(json.dumps(manifest))
+        if kind=='report-symlink':(tmp/'output.hooks.json').symlink_to(e)
+        inputs={p:p.read_bytes() for p in (e,m,record)}
+        result=subprocess.run([sys.executable,str(ROOT/'ports/scotland2/tools/prepare_hooks.py'),'--elf',str(e),'--input',str(m),'--manifest',str(record),'--output',str(output)],capture_output=True,text=True)
+        assert result.returncode==2 and 'distinct' in result.stderr,(kind,result.stderr)
+        assert all(p.read_bytes()==value for p,value in inputs.items())
+        if kind!='output-input-alias':assert not output.exists()
+        seen.append(kind)
 (folder/'status.json').write_text(json.dumps({'passed':seen,'count':len(seen)},indent=2)+'\n')
 print(f'PASS: {len(seen)} wrong-build, unsupported-instruction and malformed signed-record cases rejected before execution.')

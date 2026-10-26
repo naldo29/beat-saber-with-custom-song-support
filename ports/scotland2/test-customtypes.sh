@@ -18,7 +18,7 @@ done
 if [ "${SC2_CT_REGISTER:-0}" = 1 ]; then
  export SC2_PREPARE_CUSTOMTYPES=1 KL_SCOTLAND2_CUSTOMTYPES_REGISTER=1
  export KL_SCOTLAND2_CUSTOMTYPES_UNITY="$PWD/beatsaber140/lib/arm64-v8a/libunity.so"
- export KL_SCOTLAND2_CUSTOMTYPES_PROBE="$BUNDLE/Scotland2Metadata/test-only/libsc2_customtypes_probe.so"
+ export SC2_CT_REGISTRATION_PROBE="$BUNDLE/Scotland2Metadata/test-only/libsc2_customtypes_probe.so"
 fi
 KL_SCOTLAND2_ABI=1 KL_GUEST_JIT=0 \
  KL_SCOTLAND2_CUSTOMTYPES_PATH="$BUNDLE/Scotland2Metadata/test-only/libcustom-types.so" \

@@ -65,7 +65,7 @@ std::string utf8ToHex(int unicode) {
 }
 
 bool IsCustomAsset(TMP_SpriteAsset* asset) {
-    if (!asset)
+    if (!asset || !rootEmojiAsset)
         return false;
     if (rootEmojiAsset == asset)
         return true;
@@ -123,6 +123,11 @@ TMP_SpriteAsset* CreateSpriteAsset() {
 
 TMP_SpriteGlyph* PushSprite(int unicode) {
     if (currentEmojiIndex >= SHEET_TILES * SHEET_TILES) {
+#ifdef SC2_UNICODE_APPLE_GLYPHS
+        // Bound the original cache to 32 atlases (3200 styled glyphs). Exhaustion
+        // returns to TMP's ordinary fallback rather than growing until OOM.
+        if (rootEmojiAsset->fallbackSpriteAssets->get_Count() >= 31) return nullptr;
+#endif
         auto newSheet = CreateSpriteAsset();
         rootEmojiAsset->fallbackSpriteAssets->Add(newSheet);
         currentEmojiAsset = newSheet;
@@ -164,19 +169,21 @@ TMP_SpriteGlyph* PushSprite(int unicode) {
 // #include "UnityEngine/RenderTextureFormat.hpp"
 // #include "UnityEngine/RenderTextureReadWrite.hpp"
 
-void DrawTexture(uint unicode, TMP_SpriteGlyph* glyph) {
 #ifdef SC2_UNICODE_APPLE_GLYPHS
-    // Preserve the original glyph cache, style keys, texture atlas and TMP hooks.
-    // Only Android's platform font rasterizer is supplied by the Apple host.
-    extern int sc2_unicode_draw_glyph(uint32_t,int,int,int,uint8_t*,uint32_t,uint32_t,float,float) asm("sc2_unicode_draw_glyph");
+extern int sc2_unicode_draw_glyph(uint32_t,int,int,int,uint8_t*,uint32_t,uint32_t,float,float) asm("sc2_unicode_draw_glyph");
+static bool RasterizeTexture(uint unicode, uint32_t* raster) {
+    return !sc2_unicode_draw_glyph(unicode, GetTypefaceStyle(), currentIsUnderline,
+                                   currentIsStrikethrough, reinterpret_cast<uint8_t*>(raster),
+                                   EMOJI_SIZE, EMOJI_SIZE, EMOJI_SIZE * 0.75f, EMOJI_SIZE * 0.8f);
+}
+#endif
+void DrawTexture(uint unicode, TMP_SpriteGlyph* glyph, uint32_t* rendered = nullptr) {
+#ifdef SC2_UNICODE_APPLE_GLYPHS
+    // Preserve the original cache, atlas and TMP hooks. A failed platform glyph
+    // must fall back without inserting a blank character into the cache.
     uint32_t raster[EMOJI_SIZE * EMOJI_SIZE] = {};
-    if (sc2_unicode_draw_glyph(unicode, GetTypefaceStyle(), currentIsUnderline,
-                              currentIsStrikethrough, reinterpret_cast<uint8_t*>(raster),
-                              EMOJI_SIZE, EMOJI_SIZE, EMOJI_SIZE * 0.75f, EMOJI_SIZE * 0.8f)) {
-        logger.error("Platform glyph rasterization failed for {}", unicode);
-        return;
-    }
-    uint32_t* pixels = raster;
+    if (!rendered) { if (!RasterizeTexture(unicode, raster)) return; rendered = raster; }
+    uint32_t* pixels = rendered;
 #else
     auto env = Java::GetEnv();
 
@@ -438,6 +445,10 @@ MAKE_HOOK_MATCH(
     bool includeFallbacks
 ) {
     uint originalUnicode = unicode;
+#ifdef SC2_UNICODE_APPLE_GLYPHS
+    if (!rootEmojiAsset || !spriteAsset) return TMP_FontAssetUtilities_GetSpriteCharacterFromSpriteAsset(unicode, spriteAsset, includeFallbacks);
+    if(spriteAsset==rootEmojiAsset && (unicode>0x10ffff || (unicode>=0xd800 && unicode<=0xdfff)))return nullptr;
+#endif
     // don't offset multible times for the fallbacks
     if (spriteAsset == rootEmojiAsset)
         unicode += GetStyleOffset();
@@ -447,9 +458,17 @@ MAKE_HOOK_MATCH(
     if (!result && spriteAsset == rootEmojiAsset) {
         logger.debug("unicode {} with style {}", originalUnicode, unicode);
 
+#ifdef SC2_UNICODE_APPLE_GLYPHS
+        uint32_t raster[EMOJI_SIZE * EMOJI_SIZE] = {};
+        if (!RasterizeTexture(originalUnicode, raster)) return nullptr;
+#endif
         auto glyph = PushSprite(unicode);
-
+        if(!glyph)return nullptr;
+#ifdef SC2_UNICODE_APPLE_GLYPHS
+        DrawTexture(originalUnicode, glyph, raster);
+#else
         DrawTexture(originalUnicode, glyph);
+#endif
         currentEmojiIndex++;
 
         currentEmojiAsset->spriteCharacterLookupTable->TryGetValue(unicode, byref(result));
@@ -497,7 +516,7 @@ extern "C" __attribute__((visibility("default"))) void late_load() {
     logger.info("Installed all hooks!");
 }
 
-#ifdef SC2_UNICODE_APPLE_GLYPHS
+#if defined(SC2_UNICODE_APPLE_GLYPHS) && SC2_DIAGNOSTICS
 #include "bsml/shared/BSML.hpp"
 #include "bsml/shared/BSML/MainThreadScheduler.hpp"
 extern "C" int sc2_test_unicode_raster();
