@@ -145,6 +145,10 @@ build/t_scotland2_il2cpp: ports/scotland2/tests/il2cpp.c $(RUNTIME) $(RUNTIME_HD
 	@mkdir -p build
 	$(CC) $(CFLAGS) -o $@ ports/scotland2/tests/il2cpp.c $(RUNTIME) $(LDLIBS)
 
+build/t_android_1453: tests/t_android_1453.c $(RUNTIME) $(RUNTIME_HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -o $@ tests/t_android_1453.c $(RUNTIME) $(LDLIBS)
+
 build/t_scotland2_paper: ports/scotland2/tests/paper.c $(RUNTIME) $(RUNTIME_HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -o $@ ports/scotland2/tests/paper.c $(RUNTIME) $(LDLIBS)

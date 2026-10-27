@@ -5,15 +5,28 @@ import argparse,json,os,pathlib,re,shutil,subprocess,sys,xml.etree.ElementTree a
 ROOT=pathlib.Path(__file__).resolve().parents[3]
 PROFILE='SCOTLAND2_AVP_PROFILE_V1'
 
+def profile_configuration(root):
+ local=root/'.scotland2-avp-local.json'
+ base=pathlib.Path(os.environ.get('AVPPLAY_HOME',str(pathlib.Path.home()/'Library/Application Support/AVPPlay')))
+ shared=base/'core-mods-build-inputs.json'
+ path=local if local.is_file() else shared
+ return json.loads(path.read_text()) if path.is_file() else {}
+
 def validate_metadata(root):
  # The runtime derives its OBB filename from this file, not the installed app's
  # Info.plist. Missing metadata silently selects 1.28's versionCode 545.
  metadata=(root/'beatsaber140/apktool.yml').read_text()
- if not re.search(r'^\s*versionCode:\s*[\'"]?1716[\'"]?\s*$',metadata,re.M):
-  raise ValueError('Core-mod game metadata must identify Beat Saber versionCode 1716')
+ code=re.search(r'^\s*versionCode:\s*[\'"]?(1716|3237)[\'"]?\s*$',metadata,re.M)
+ if not code:
+  raise ValueError('Core-mod game metadata must identify a supported Beat Saber build (1716 or 3237)')
  manifest=ET.parse(root/'beatsaber140/AndroidManifest.xml').getroot()
  if manifest.tag!='manifest' or manifest.get('package')!='com.beatgames.beatsaber':
   raise ValueError('Core-mod game manifest must identify Beat Saber')
+ if code[1]=='3237':
+  profile=json.loads((root/'ports/scotland2/port1453/selected-mods.json').read_text())
+  if profile['game']['versionCode']!=3237 or profile['runtimeProfile']!='1.45.3':
+   raise ValueError('Missing compatible Unity 6.3 core-mod profile')
+ return int(code[1])
 
 def install_app(root,device,destination):
  validate_metadata(root)
@@ -31,9 +44,13 @@ def main():
  if os.environ.get('KLEPTON_TARGET')!='beatsaber140':raise ValueError('This core-mod profile supports only the pinned Beat Saber target')
  team=os.environ.get('KLEPTON_TEAM');bundle=os.environ.get('KLEPTON_BUNDLE_ID');device=os.environ.get('KLEPTON_DEVICE')
  if not team or not bundle or (not args.no_install and not device):raise ValueError('AVP Play must supply the signing team, existing app identity and device')
- validate_metadata(ROOT)
- config_path=ROOT/'.scotland2-avp-local.json'
- config=json.loads(config_path.read_text()) if config_path.exists() else {}
+ version=validate_metadata(ROOT)
+ if version==3237:
+  command=[sys.executable,str(ROOT/'ports/scotland2/tools/avp_play_1453.py')]
+  if args.no_install:command.append('--no-install')
+  subprocess.run(command,cwd=ROOT,check=True)
+  return
+ config=profile_configuration(ROOT)
  def location(key,default):
   path=pathlib.Path(config.get(key,default));return (path if path.is_absolute() else ROOT/path).resolve()
  output=location('output',str(ROOT.parent/(ROOT.name+'-coremods-build')))

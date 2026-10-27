@@ -4,6 +4,8 @@
 <dict>
     <key>KLScotland2Diagnostics</key>
     <string>$(KL_SCOTLAND2_DIAGNOSTICS)</string>
+    <key>KLScotland2Profile</key>
+    <string>$(KL_SCOTLAND2_PROFILE)</string>
     <key>KLAllowTestSwitches</key>
     <string>$(KL_ALLOW_TEST_SWITCHES)</string>
     <key>KLScotland2Test</key>

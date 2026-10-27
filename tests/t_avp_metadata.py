@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -74,6 +75,21 @@ class MetadataInstallTests(unittest.TestCase):
                 calls, output, error = self.run_main()
                 self.assertIsNotNone(error)
                 self.assertEqual(calls, [])
+
+    def test_unity63_dispatches_its_own_profile_without_legacy_build_or_device_calls(self):
+        (self.root/'beatsaber140/apktool.yml').write_text('versionCode: 3237\n')
+        profile=self.root/'ports/scotland2/port1453';profile.mkdir(parents=True)
+        (profile/'selected-mods.json').write_text(json.dumps({'game':{'versionCode':3237},'runtimeProfile':'1.45.3'}))
+        calls,output,error=self.run_main(no_install=True)
+        self.assertIsNone(error)
+        self.assertEqual(len(calls),1)
+        self.assertEqual(calls[0][0][1:], [str(self.root/'ports/scotland2/tools/avp_play_1453.py'),'--no-install'])
+
+    def test_unity63_without_a_matching_profile_fails_before_any_build(self):
+        (self.root/'beatsaber140/apktool.yml').write_text('versionCode: 3237\n')
+        calls,output,error=self.run_main(no_install=True)
+        self.assertIsNotNone(error)
+        self.assertEqual(calls,[])
 
 if __name__ == '__main__':
     unittest.main()

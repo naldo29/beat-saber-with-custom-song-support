@@ -254,7 +254,11 @@ int kl_scotland2_start(void) {
     if (kl_env_on("KL_SCOTLAND2_FLAMINGO",0)) {
         if (!android_paths) return stop("Flamingo requires the Android ABI support module");
         char library[4096];
-        int size=snprintf(library,sizeof library,"%s/shims/libsc2_flamingo.so",root);
+        const char *flamingo_name=getenv("KL_SCOTLAND2_FLAMINGO_LIBRARY");
+        if (!flamingo_name || !*flamingo_name) flamingo_name="libsc2_flamingo.so";
+        if (strcmp(flamingo_name,"libsc2_flamingo.so") && strcmp(flamingo_name,"libflamingo.so"))
+            return stop("unsupported Flamingo library name");
+        int size=snprintf(library,sizeof library,"%s/shims/%s",root,flamingo_name);
         if (size<0 || (size_t)size>=sizeof library) return stop("Flamingo support path too long");
         android_flamingo=api.open(library,2);
         if (!android_flamingo || kl_get_stats(android_flamingo)->imports_missing) return stop("Flamingo source port missing or has unresolved imports");

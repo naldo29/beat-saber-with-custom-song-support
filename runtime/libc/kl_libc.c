@@ -3559,12 +3559,22 @@ long klb_syscall(long n, long a1, long a2, long a3, long a4, long a5, long a6) {
         struct kiov { void *base; size_t len; };
         const struct kiov *loc = (const struct kiov *)(uintptr_t)a2, *rem = (const struct kiov *)(uintptr_t)a4;
         unsigned long nl = (unsigned long)a3, nr = (unsigned long)a5;
+        if(a6 || nl>1024 || nr>1024) { kl_errno_set(EINVAL);return -1; }
         if ((pid_t)a1 != getpid()) {
             syscall_warn_once(n, __builtin_return_address(0));
             kl_errno_set(EPERM);
             return -1;
         }
         if ((nl && !loc) || (nr && !rem)) { kl_errno_set(EFAULT); return -1; }
+        size_t local_total=0,remote_total=0;
+        for(unsigned long i=0;i<nl;++i) {
+            if(loc[i].len>(size_t)LONG_MAX-local_total) {kl_errno_set(EINVAL);return -1;}
+            local_total+=loc[i].len;
+        }
+        for(unsigned long i=0;i<nr;++i) {
+            if(rem[i].len>(size_t)LONG_MAX-remote_total) {kl_errno_set(EINVAL);return -1;}
+            remote_total+=rem[i].len;
+        }
         long total = 0;
         unsigned long li = 0, ri = 0;
         size_t lo = 0, ro = 0;
@@ -4279,3 +4289,10 @@ void kl_fs_trace_open(const char *path, int flags, int fd) {
 }
 
 kl_file_watch_fn kl_file_watch;
+
+// Same self-process, fault-safe implementation for the libc and raw syscall
+// doors. Unity 6.3 imports this spelling directly when inspecting local memory.
+ssize_t klb_process_vm_readv(pid_t pid,const void *local,unsigned long nl,
+                            const void *remote,unsigned long nr,unsigned long flags) {
+    return klb_syscall(KL_SYS_process_vm_readv,pid,(long)local,nl,(long)remote,nr,flags);
+}

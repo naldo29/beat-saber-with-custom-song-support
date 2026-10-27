@@ -34,6 +34,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import targets as targets_mod
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SC2_PROFILE = os.environ.get('SC2_GAME_PROFILE', '1.40.8')
+if SC2_PROFILE not in ('1.40.8', '1.45.3'):
+    raise SystemExit('Unknown Scotland2 game profile')
 KLT = targets_mod.resolve(os.environ.get("KLEPTON_TARGET") or targets_mod.DEFAULT)
 # The PRODUCT name, which is also the .xcodeproj's, the .app's and the scheme's.
 # The Swift sources are still Klepton*.swift whatever the product is called —
@@ -201,13 +204,19 @@ if SC2:
         raise SystemExit('Scotland2 requires beatsaber140 and an explicit recipient bundle ID.')
     if os.environ.get('SC2_BUILD_MODE') == 'release':
         import json as _sc2_json
-        with open(os.path.join(HERE, '../ports/scotland2/selected-mods.json')) as _sc2_file:
+        _sc2_manifest = '../ports/scotland2/port1453/selected-mods.json' if SC2_PROFILE == '1.45.3' else '../ports/scotland2/selected-mods.json'
+        with open(os.path.join(HERE, _sc2_manifest)) as _sc2_file:
             _sc2_selection = _sc2_json.load(_sc2_file)
         SC2 = ['Scotland2Core', 'SC2_libcxx_shared'] + [
             'SC2_' + os.path.basename(path)[:-3] for path in _sc2_selection['metadata']]
     for name in SC2:
         if not os.path.isdir(os.path.join(HERE, 'Frameworks', name + '.xcframework')):
             raise SystemExit('Use ports/scotland2/tools/build_release.py to stage the selected release.' if os.environ.get('SC2_BUILD_MODE')=='release' else 'Run bash ports/scotland2/package.sh xros before generating the diagnostic app.')
+# The newer APK carries its own Android C++ runtime. The mod composition has
+# one explicitly selected shared runtime for the game and all guest mods.
+# Both translate to libcxx_shared.framework, so embedding both is ambiguous.
+if SC2 and 'SC2_libcxx_shared' in SC2:
+    GUEST = [name for name in GUEST if name not in ('libc++_shared', 'libcxx_shared')]
 EMBED = GUEST + ANGLE + MVK + SC2
 
 
@@ -608,6 +617,7 @@ APP_BUILD = _plist_version("KLEPTON_APP_BUILD", "1")
 COMMON = f"""
                 KL_ALLOW_TEST_SWITCHES = "{0 if os.environ.get('SC2_BUILD_MODE')=='release' else 1}";
                 KL_SCOTLAND2_TEST = "{1 if SC2 else 0}";
+                KL_SCOTLAND2_PROFILE = "{SC2_PROFILE}";
                 ENABLE_DEBUG_DYLIB = "{"NO" if os.environ.get('SC2_BUILD_MODE')=='release' else "YES"}";
                 ENABLE_PREVIEWS = "{"NO" if os.environ.get('SC2_BUILD_MODE')=='release' else "YES"}";
                 KL_SCOTLAND2_DIAGNOSTICS = "{0 if os.environ.get('SC2_BUILD_MODE')=='release' else 1}";

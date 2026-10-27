@@ -1463,6 +1463,7 @@ struct BootView: View {
         // The selected app configuration enables the original loader by default.
         // An explicit KL_SCOTLAND2=0 still permits a baseline comparison.
         if Bundle.main.object(forInfoDictionaryKey: "KLScotland2Test") as? String == "1" {
+            let modernScotland2 = Bundle.main.object(forInfoDictionaryKey: "KLScotland2Profile") as? String == "1.45.3"
             setenv("KL_SCOTLAND2", "1", 0)
             let sc2Diagnostics = Bundle.main.object(forInfoDictionaryKey: "KLScotland2Diagnostics") as? String ?? "1"
             setenv("KL_SCOTLAND2_DIAGNOSTICS", sc2Diagnostics, 0)
@@ -1470,6 +1471,7 @@ struct BootView: View {
                 setenv("KL_SCOTLAND2_ABI", "1", 0)
                 setenv("KL_SCOTLAND2_AOT_PROBE", "1", 0)
                 setenv("KL_SCOTLAND2_FLAMINGO", "1", 0)
+                if modernScotland2 { setenv("KL_SCOTLAND2_FLAMINGO_LIBRARY", "libflamingo.so", 0) }
                 setenv("KL_SCOTLAND2_FLAMINGO_PROBE", "1", 0)
                 setenv("KL_SCOTLAND2_SCENE_HOOK", "1", 0)
             }
@@ -1481,7 +1483,7 @@ struct BootView: View {
             }
             if Bundle.main.object(forInfoDictionaryKey: "KLScotland2BSML") as? String == "1" {
                 setenv("KL_SCOTLAND2_BSML_PROBE", "1", 0)
-                setenv("KL_SCOTLAND2_FILESYSTEM", "1", 0)
+                if !modernScotland2 { setenv("KL_SCOTLAND2_FILESYSTEM", "1", 0) }
             }
             if Bundle.main.object(forInfoDictionaryKey: "KLScotland2SongCore") as? String == "1" {
                 setenv("KL_SCOTLAND2_SONGCORE_PROBE", "1", 0)
@@ -1495,7 +1497,7 @@ struct BootView: View {
             }
             if Bundle.main.object(forInfoDictionaryKey: "KLScotland2SongDownloader") as? String == "1" {
                 setenv("KL_SCOTLAND2_SONGDOWNLOADER_PROBE", "1", 0)
-                setenv("KL_SCOTLAND2_DOWNLOAD_BOUNDARIES", "1", 0)
+                if !modernScotland2 { setenv("KL_SCOTLAND2_DOWNLOAD_BOUNDARIES", "1", 0) }
             }
             if Bundle.main.object(forInfoDictionaryKey: "KLScotland2CoreMods") as? String == "1" {
                 setenv("KL_SCOTLAND2_REMAINING_CORE", "1", 0)

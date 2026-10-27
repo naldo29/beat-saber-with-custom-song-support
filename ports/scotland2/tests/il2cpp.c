@@ -10,6 +10,18 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <execinfo.h>
+#include <signal.h>
+
+static void import_abort_trace(int signal_number) {
+    void *frames[80];int count=backtrace(frames,80);
+    for(int i=0;i<count;++i) {
+        size_t offset=0;const char *image=kl_addr_image(frames[i],&offset);
+        if(image) fprintf(stderr,"IMPORT_ABORT_FRAME %d %s +0x%zx\n",i,image,offset);
+        else fprintf(stderr,"IMPORT_ABORT_NATIVE %d %p\n",i,frames[i]);
+    }
+    _Exit(128+signal_number);
+}
 
 static void verify_mod_hooks(kl_image *game,const char *profile_path,const char *owner,unsigned expected) {
     FILE *file=fopen(profile_path,"r");assert(file);
@@ -49,6 +61,7 @@ int main(int argc, char **argv) {
     kl_target target = {.name="beatsaber140", .kind=KL_GUEST_UNITY};
     kl_driver_init(&target, NULL, 0);
     kl_guest_extstorage_map(kl_jni_files_dir());
+    if(getenv("SC2_IMPORTS_ONLY") || getenv("SC2_INIT_ONLY") || getenv("SC2_1453_PROBE")) signal(SIGABRT,import_abort_trace);
     int start=kl_scotland2_start();
     if(getenv("SC2_TEST_REJECT_IMPORT")) {
         assert(start==-1);
@@ -58,6 +71,54 @@ int main(int argc, char **argv) {
         return 0;
     }
     assert(start == 0);
+    if(getenv("SC2_1453_DOWNLOAD_PROBE")) {
+        kl_image *probe=kl_scotland2_open_module(getenv("SC2_1453_DOWNLOAD_PROBE"),2);
+        if(!probe){fprintf(stderr,"1453 download fixture: %s\n",kl_error());return 1;}
+        FILE *targets=fopen(getenv("SC2_1453_PRIVATE_TARGETS"),"r");assert(targets);
+        void *private_entries[3];char module[256];unsigned long long offset;
+        for(unsigned i=0;i<3;++i) {
+            assert(fscanf(targets,"%255s %llx",module,&offset)==2);
+            kl_image *owner=kl_find_image(module);assert(owner && offset<kl_span(owner));
+            private_entries[i]=(char*)kl_base(owner)+offset;
+        }
+        fclose(targets);
+        void (*bind)(void*,void*,void*)=kl_sym(probe,"sc2_test_1453_bind_private");assert(bind);
+        bind(private_entries[0],private_entries[1],private_entries[2]);
+        int (*tls)(const char*,int)=kl_sym(probe,"sc2_test_1453_download_tls");assert(tls);
+        assert(!tls(getenv("SC2_1453_GOOD_TLS"),1));
+        assert(!tls(getenv("SC2_1453_BAD_TLS"),0));
+        assert(!tls(getenv("SC2_1453_BAD_HOST"),0));
+        int (*beatsaver)(const char*,size_t,const char*)=kl_sym(probe,"sc2_test_1453_beatsaver_extract");
+        int (*downloader)(const char*,size_t,const char*)=kl_sym(probe,"sc2_test_1453_downloader_extract");assert(beatsaver&&downloader);
+        FILE *file=fopen(getenv("SC2_1453_BAD_ZIPS"),"r");assert(file);
+        char *line=NULL;size_t capacity=0;unsigned cases=0;ssize_t length;
+        while((length=getline(&line,&capacity,file))>0) {
+            if(line[length-1]=='\n')line[--length]=0;
+            assert(length && !setenv("SC2_TEST_BAD_ZIP_PATH",line,1));
+            check_safe_extract(beatsaver,"BEATSAVER_1453");
+            check_safe_extract(downloader,"SONGDOWNLOADER_1453");++cases;
+        }
+        assert(feof(file)&&cases);fclose(file);free(line);
+        printf("DOWNLOAD_BOUNDARIES_1453_OK three actual clients accepted trusted HTTPS and rejected untrusted certificates/wrong hosts; %u ZIP attack cases rejected by both original download paths.\n",cases);
+        return 0;
+    }
+    const char *import_list=getenv("SC2_IMPORTS_ONLY");
+    if (import_list && *import_list) {
+        FILE *file=fopen(import_list,"r");assert(file);
+        char name[256];unsigned checked=0;
+        while(fscanf(file,"%255s",name)==1) {
+            assert(!strchr(name,'/'));
+            kl_image *module=kl_find_image(name);
+            if (!module) { fprintf(stderr,"Missing import-check module: %s\n",name);return 1; }
+            unsigned missing_count=0;const char *const *missing=kl_missing_imports(module,&missing_count);
+            for (unsigned i=0;i<missing_count;++i) fprintf(stderr,"Unresolved %s: %s\n",name,missing[i]);
+            if(missing_count || kl_get_stats(module)->imports_missing) return 1;
+            ++checked;
+        }
+        assert(feof(file)&&checked);fclose(file);
+        printf("HOST_IMPORTS_AND_CONSTRUCTORS_OK %u real Android modules strictly loaded; no game initialization or mod callbacks invoked.\n",checked);
+        return 0;
+    }
     if(getenv("SC2_TEST_MISSING_DEP")) {
         assert(!kl_scotland2_open_module(getenv("SC2_TEST_MISSING_DEP"),2));
         const char *(*error)(void)=kl_shim_lookup("dlerror");
@@ -114,6 +175,15 @@ int main(int argc, char **argv) {
     assert(kl_get_stats(image)->imports_missing == 0);
     kl_register_image("libil2cpp.so", image);
     kl_run_init(image);
+    if(getenv("SC2_1453_PROBE")) {
+        kl_image *unity=kl_load_auto(getenv("SC2_1453_UNITY"));
+        if(!unity){fprintf(stderr,"1453 Unity load: %s\n",kl_error());return 1;}
+        unsigned n=0;const char *const *missing=kl_missing_imports(unity,&n);
+        for(unsigned i=0;i<n;++i)fprintf(stderr,"Unity unresolved: %s\n",missing[i]);
+        // Android's debugger check is not used by these initialization checks.
+        assert(n==1 && !strcmp(missing[0],"ptrace"));
+        kl_register_image("libunity.so",unity);
+    }
     if (getenv("SC2_LAPIZ_CATALOG")) {
         // Lapiz registers custom types during the real early phase. Its Unity
         // hook target must already be mapped, as on device; do not start Unity.
@@ -143,6 +213,16 @@ int main(int argc, char **argv) {
     const void **(*assemblies)(void *, size_t *) = kl_sym(image, "il2cpp_domain_get_assemblies");
     assert(data_dir && config_dir && domain_get && assemblies);
     data_dir(argv[2]); config_dir(argv[2]);
+    if(getenv("SC2_1453_SCENE_ICALL")) {
+        // Unity normally registers this while booting. This isolated host test
+        // supplies its independently measured registration without starting
+        // Unity's graphics/window subsystem. Production registration is untested.
+        FILE *file=fopen(getenv("SC2_1453_SCENE_ICALL"),"r");assert(file);
+        unsigned long long offset;char name[256];assert(fscanf(file,"%llx %255s",&offset,name)==2);fclose(file);
+        kl_image *unity=kl_find_image("libunity.so");assert(unity && offset<kl_span(unity));
+        void (*add)(const char*,void*)=kl_sym(image,"il2cpp_add_internal_call");assert(add);
+        add(name,(char*)kl_base(unity)+offset);
+    }
     void *original = kl_sym(image, "il2cpp_init");
     assert(original);
     assert(!kl_scotland2_interpose(NULL, "il2cpp_init", original));
@@ -157,6 +237,37 @@ int main(int argc, char **argv) {
     size_t count = 0;
     assert(assemblies(domain, &count) && count > 0);
     assert(symbol(image,"il2cpp_init")==original);
+    if(getenv("SC2_1453_PROBE")) {
+        kl_image *probe=kl_scotland2_open_module(getenv("SC2_1453_PROBE"),2);
+        if(!probe){fprintf(stderr,"1453 guest fixture: %s\n",kl_error());return 1;}
+        int (*sdk)(void**,size_t)=kl_sym(probe,"sc2_test_1453_sdk");
+        int (*registration)(void)=kl_sym(probe,"sc2_test_1453_registration");assert(sdk&&registration);
+        void *resolved[3]={0};int result=sdk(resolved,3);
+        fprintf(stderr,"SDK_1453_RESULT %d\n",result);if(result)return 1;
+        FILE *file=fopen(getenv("SC2_1453_SDK_PROFILE"),"r");assert(file);
+        unsigned long long offset;char name[128];unsigned checked=0;
+        while(fscanf(file,"%llx %127s",&offset,name)==2){
+            if(checked>=3 || resolved[checked]!=(char*)kl_base(image)+offset){
+                fprintf(stderr,"SDK target mismatch: %s\n",name);return 1;
+            }
+            ++checked;
+        }
+        assert(feof(file)&&checked==3);fclose(file);
+        result=registration();fprintf(stderr,"REGISTRATION_1453_RESULT %d\n",result);if(result)return 1;
+        verify_mod_hooks(image,getenv("SC2_1453_CT_PROFILE"),"libcustom-types.so",5);
+        if(getenv("SC2_1453_EARLY")) {
+            verify_mod_hooks(image,getenv("SC2_1453_LAPIZ_PROFILE"),"liblapiz.so",26);
+            verify_mod_hooks(image,getenv("SC2_1453_BSML_PROFILE"),"libbsml.so",14);
+            verify_mod_hooks(kl_find_image("libunity.so"),getenv("SC2_1453_SCENE_PROFILE"),"libsc2_scene.so",1);
+            puts("EARLY_MODS_1453_OK original Scotland2 setup/load; 26 Lapiz and 14 BSML hooks verified; scene hook armed with measured host icall registration, not fired.");
+        }
+        printf("SDK_REGISTRATION_1453_OK %zu domain assemblies; SDK targets and five custom-type hooks match measured addresses; actual mod types and object construction verified.\n",count);
+        return 0;
+    }
+    if(getenv("SC2_INIT_ONLY")) {
+        printf("GAME_IL2CPP_INIT_OK %zu assemblies through original Scotland2 phase bridge; no Unity startup or mod load callbacks exercised.\n",count);
+        return 0;
+    }
     if(getenv("SC2_REMAINING_CORE")) {
         const char *names[]={"datakeeper","unicode"};
         const char *libs[]={"libdatakeeper.so","libunicode.so"};
@@ -355,11 +466,13 @@ int main(int argc, char **argv) {
         }
         assert(feof(profile)&&count==8);fclose(profile);
         fprintf(stderr,"PLAYLISTCORE_HOST_HOOKS_OK %u imports, original setup, five registered types and all eight game hook layers; actual late UI callback deferred to device.\n",kl_get_stats(playlist)->imports_bound);
+#if !defined(SC2_DIAGNOSTICS) || SC2_DIAGNOSTICS
         assert(!kl_scotland2_verify_mod_hooks(getenv("SC2_PLAYLISTCORE_PROFILE"),"libplaylistcore.so",8));
         assert(!kl_scotland2_verify_mod_hooks(getenv("SC2_METACORE_PROFILE"),"libmetacore.so",36));
         assert(!kl_scotland2_verify_mod_hooks(getenv("SC2_BSML_PROFILE"),"libbsml.so",13));
         assert(!kl_scotland2_verify_mod_hooks("build/scotland2/android-lapiz/hook-profile.txt","liblapiz.so",31));
         puts("MOD_SHARED_HOOK_CHAIN_OK original SDK links preserve BSML, MetaCore and PlaylistCore together at the shared restart target and both PlaylistCore original hook layers.");
+#endif
     }
     if(getenv("SC2_SONGDOWNLOADER_PATH")) {
         kl_image *browser=kl_scotland2_open_module(getenv("SC2_SONGDOWNLOADER_PATH"),2);

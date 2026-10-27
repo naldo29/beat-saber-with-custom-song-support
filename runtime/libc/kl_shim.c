@@ -2155,6 +2155,7 @@ X(klb_close) X(klb_lseek) X(klb_pread)
 X(klb_sysconf) X(klb_fopen) X(klb_access) X(klb_mkdir) X(klb_unlink) X(klb_rename) X(klb_link)
 X(klh_android_log_print)
 X(klb_getpwuid) X(klb_getpwuid_r) X(klb_execl) X(klb_system) X(klb_syscall) X(klb_swprintf)
+X(klb_process_vm_readv)
 X(klb_vprintf) X(klb_vsscanf) X(klb_memrchr) X(klb_memalign)
 X(klb_getrandom) X(klb_isnan)
 X(klb_isnanf) X(klb_isinf) X(klb_isinff) X(klb_isfinite) X(klb_isfinitef)
@@ -2479,6 +2480,7 @@ static const kl_entry g_shim[] = {
     E("strtold", klv_strtold), E("wcstold", klv_wcstold), E("strtold_l", klv_strtold_l),
     E("swprintf", klv_swprintf), E("vswprintf", kl_vswprintf_g), E("execl", klb_execl), E("system", klb_system),
     E("syscall", klb_syscall),
+    E("process_vm_readv", klb_process_vm_readv),
 
     // guest va_list consumers
     E("vfprintf", kl_vfprintf), E("vsnprintf", kl_vsnprintf), E("vasprintf", kl_vasprintf),
