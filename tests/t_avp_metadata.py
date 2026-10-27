@@ -91,5 +91,16 @@ class MetadataInstallTests(unittest.TestCase):
         self.assertIsNotNone(error)
         self.assertEqual(calls,[])
 
+class AVPBuildStampTests(unittest.TestCase):
+    def test_actual_avp_dotted_stamp_and_invalid_values(self):
+        import sys
+        tools=Path(__file__).resolve().parents[1]/'ports/scotland2/tools'
+        with patch.object(sys, 'path', [str(tools), *sys.path]):
+            from assemble_1453_app import build_stamp
+            self.assertEqual(build_stamp('3237.351.1'), '3237.351.1')
+            self.assertEqual(build_stamp(349), '349')
+            for value in ('', '-1', '1.2.3.4', '1..2', '351 release', '1\n', '1000000000'):
+                with self.assertRaises(Exception): build_stamp(value)
+
 if __name__ == '__main__':
     unittest.main()

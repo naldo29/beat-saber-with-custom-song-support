@@ -7,6 +7,12 @@ from profile_1453 import selection,ROOT
 from build_release import stage_presentation,INSTALLER_DEFAULTS
 EXISTING_APP_ID='dev.klepton.beatsaber140.scotland2.test'
 
+def build_stamp(value):
+    value=str(value)
+    if not re.fullmatch(r'[0-9]{1,9}(?:\.[0-9]{1,9}){0,2}',value):
+        raise argparse.ArgumentTypeError('Use the numeric AVP build stamp, for example 3237.351.1')
+    return value
+
 def framework_binary(container):
     info=plistlib.loads((container/'Info.plist').read_bytes())
     rows=[row for row in info['AvailableLibraries'] if row.get('SupportedPlatform')=='xros' and not row.get('SupportedPlatformVariant')]
@@ -86,5 +92,5 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--workspace',type=Path,required=True)
     p.add_argument('--game-preparation',type=Path,required=True);p.add_argument('--presentation-assets',type=Path)
     p.add_argument('--team',required=True);p.add_argument('--bundle-id',default=EXISTING_APP_ID)
-    p.add_argument('--build-number',type=int,default=349);p.add_argument('--unsigned',action='store_true')
+    p.add_argument('--build-number',type=build_stamp,default='349');p.add_argument('--unsigned',action='store_true')
     assemble(p.parse_args())
